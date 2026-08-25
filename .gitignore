@@ -1,0 +1,25 @@
+# 認証情報。サーバーごとに作成するため、リポジトリには含めない。
+.htpasswd
+
+# デプロイ設定。接続先はサーバーごとに違うため、リポジトリには含めない。
+# Makefile.example をコピーして作成する。
+Makefile
+
+# Apache の設定。認証情報の置き場所（絶対パス）がサーバーごとに違うため、
+# リポジトリには含めない。.htaccess.example をコピーして作成する。
+# （photos/ movies/ の .htaccess は環境に依存しないので対象外）
+/.htaccess
+
+# 写真・動画データ。サイズが大きいためリポジトリでは管理しない。
+photos/*
+!photos/.gitkeep
+!photos/.htaccess
+
+movies/*
+!movies/.gitkeep
+!movies/.htaccess
+
+data/*
+
+.DS_Store
+*.sh

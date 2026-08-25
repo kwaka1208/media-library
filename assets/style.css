@@ -1,0 +1,1542 @@
+/* ---------------------------------------------------------------
+   Media Library スタイル
+   --------------------------------------------------------------- */
+
+:root {
+    --thumb-size: 200px;
+
+    --bg: #f5f5f7;
+    --panel: #ffffff;
+    --text: #1c1c1e;
+    --text-muted: #6b6b70;
+    --border: #dcdce1;
+    --accent: #2d6cdf;
+    --shadow: 0 1px 3px rgba(0, 0, 0, .08);
+}
+
+@media (prefers-color-scheme: dark) {
+    :root {
+        --bg: #16161a;
+        --panel: #202026;
+        --text: #ececf1;
+        --text-muted: #9a9aa4;
+        --border: #33333c;
+        --accent: #6ea0ff;
+        --shadow: 0 1px 3px rgba(0, 0, 0, .4);
+    }
+}
+
+* { box-sizing: border-box; }
+
+body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sans JP", "Yu Gothic", sans-serif;
+    font-size: 15px;
+    line-height: 1.6;
+}
+
+a { color: var(--accent); }
+
+.visually-hidden {
+    position: absolute;
+    width: 1px; height: 1px;
+    margin: -1px; padding: 0;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+}
+
+/* ---- ヘッダー ---- */
+
+/* ヘッダー・パンくず・操作バーをまとめて画面上部に貼り付ける。
+   高さが画面を埋め尽くさないよう上限を決め、あふれたら中でスクロールさせる。 */
+.page-header {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    max-height: 60vh;
+    overflow-y: auto;
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+}
+
+/* タイトル・パンくず・操作ボタン・検索を1行に並べる。
+   幅が足りないときはパンくずだけを縮めたいので、他は flex-shrink: 0 にしておく。 */
+.header {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 14px;
+    align-items: center;
+    padding: 12px 20px;
+}
+
+.site-title {
+    flex-shrink: 0;
+    margin: 0;
+    font-size: 17px;
+    font-weight: 600;
+}
+
+.site-title a {
+    color: inherit;
+    text-decoration: none;
+}
+
+/* 写真／動画の切り替えタブ */
+.root-tabs {
+    display: flex;
+    flex-shrink: 0;
+    gap: 4px;
+    padding: 3px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+}
+
+.root-tab {
+    padding: 4px 14px;
+    font-size: 14px;
+    color: var(--text-muted);
+    text-decoration: none;
+    white-space: nowrap;
+    border-radius: 999px;
+}
+
+.root-tab:hover { color: var(--text); }
+
+.root-tab.current {
+    font-weight: 600;
+    color: #fff;
+    background: var(--accent);
+}
+
+.toolbar {
+    display: flex;
+    flex-shrink: 0;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    margin-left: auto; /* 右端へ寄せる */
+}
+
+.field input,
+.field select {
+    padding: 7px 10px;
+    font-size: 14px;
+    font-family: inherit;
+    color: var(--text);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+}
+
+.field.search input { width: 220px; }
+
+.field input:focus,
+.field select:focus {
+    outline: 2px solid var(--accent);
+    outline-offset: -1px;
+}
+
+.button {
+    display: inline-block;
+    padding: 7px 14px;
+    font-size: 14px;
+    color: var(--text);
+    text-decoration: none;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    cursor: pointer;
+}
+
+.button:hover { border-color: var(--accent); }
+
+/* ---- パンくず ---- */
+
+.breadcrumbs {
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 4px;
+    align-items: center;
+    /* min-width: 0 と overflow: hidden がないと、長いパスがヘッダーを押し広げてしまう */
+    min-width: 0;
+    overflow: hidden;
+    font-size: 13px;
+    color: var(--text-muted);
+}
+
+/* 幅が足りないときは現在地のほうを縮め、起点の「ホーム」は残す */
+.breadcrumbs .crumb:first-child { flex-shrink: 0; }
+
+/* 1つの名前が長いときは末尾を省略する。フルネームは title 属性で見られる。 */
+.crumb {
+    max-width: 16ch;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    text-decoration: none;
+}
+
+.crumb.current { color: var(--text); font-weight: 600; }
+
+.crumb-sep,
+.crumb-fold {
+    flex-shrink: 0;
+    color: var(--border);
+}
+
+.crumb-fold { color: var(--text-muted); cursor: default; }
+
+/* ---- 本文 ---- */
+
+/* 一覧の下の余白でも右クリックメニューを出せるよう、高さを確保しておく。
+   リスト表示で詳細を出したときは、一覧の右に並べる。 */
+.content {
+    display: flex;
+    gap: 18px;
+    align-items: flex-start;
+    min-height: 70vh;
+    padding: 14px 20px 40px;
+}
+
+/* min-width: 0 がないと、長いファイル名で一覧側が縮まなくなる */
+.listing {
+    flex: 1;
+    min-width: 0;
+}
+
+.summary {
+    margin: 4px 0 14px;
+    font-size: 13px;
+    color: var(--text-muted);
+}
+
+.page-indicator { margin-left: 8px; }
+
+.hint {
+    margin: 0 0 14px;
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+.notice {
+    padding: 14px 16px;
+    margin: 10px 0;
+    font-size: 14px;
+    color: var(--text-muted);
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 9px;
+}
+
+.notice.error {
+    color: #b3261e;
+    border-color: #f0b3ae;
+    background: #fdf1f0;
+}
+
+.notice.ok {
+    color: #1b5e20;
+    border-color: #b5ddb7;
+    background: #f1f8f1;
+}
+
+/* ---- フォルダ一覧 ---- */
+
+.folders {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(var(--thumb-size), 1fr));
+    gap: 14px;
+    padding: 0;
+    margin: 0 0 22px;
+    list-style: none;
+}
+
+/* グリッド項目の min-width は既定が auto なので、明示的に 0 にしないと縮まない */
+.folders > li {
+    display: flex;
+    min-width: 0;
+}
+
+.folder {
+    display: flex;
+    flex: 1;
+    min-width: 0;
+    gap: 10px;
+    align-items: center;
+    min-height: 64px;
+    padding: 12px 14px;
+    color: var(--text);
+    text-decoration: none;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    box-shadow: var(--shadow);
+}
+
+.folder:hover { border-color: var(--accent); }
+
+.folder-icon {
+    flex-shrink: 0;
+    font-size: 20px;
+    line-height: 1;
+}
+
+/* info.yml でサムネイルを指定したフォルダ。📁 の代わりに小さな絵を出す。 */
+.folder-thumb {
+    flex-shrink: 0;
+    width: 52px;
+    height: 38px;
+    overflow: hidden;
+    background: var(--bg);
+    border-radius: 6px;
+}
+
+.folder-thumb img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.folder-name {
+    /* min-width: 0 がないと flex 項目が縮まず、省略記号が出ない */
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* info.yml の見出しはフォルダ名より長くなりがちなので、2行まで折り返す */
+.folder.has-info .folder-name {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    white-space: normal;
+    line-height: 1.35;
+}
+
+.folder-count {
+    flex-shrink: 0;
+    padding: 1px 8px;
+    font-size: 12px;
+    color: var(--text-muted);
+    background: var(--bg);
+    border-radius: 20px;
+}
+
+/* ---- 画像グリッド ---- */
+
+.grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(var(--thumb-size), 1fr));
+    gap: 14px;
+}
+
+.card {
+    margin: 0;
+    overflow: hidden;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    box-shadow: var(--shadow);
+}
+
+.thumb {
+    display: block;
+    aspect-ratio: 1 / 1;
+    background: var(--bg);
+}
+
+.thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    background: var(--bg);
+}
+
+.thumb:hover img { opacity: .85; }
+
+/* 動画のサムネイル。専用の画像は作らず、先頭のコマをそのまま見せる。
+   .thumb を基準に、中央へ再生マークを重ねる。 */
+.thumb { position: relative; }
+
+.thumb video {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    background: #000;
+    pointer-events: none; /* クリックは .thumb（リンク）に渡す */
+}
+
+.play-badge {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    padding-left: 4px; /* ▶ の重心に合わせて、見た目を中央に寄せる */
+    font-size: 18px;
+    color: #fff;
+    pointer-events: none;
+    background: rgba(0, 0, 0, .5);
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+}
+
+.thumb:hover video { opacity: .85; }
+
+.caption {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 7px 10px 9px;
+}
+
+.file-name {
+    overflow: hidden;
+    font-size: 13px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.file-meta {
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
+/* ---- ページ送り ---- */
+
+.pagination {
+    display: flex;
+    /* 画面が狭いときは折り返して、すべてのボタンを押せる状態に保つ */
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    justify-content: center;
+    margin-top: 28px;
+    font-size: 13px;
+    color: var(--text-muted);
+}
+
+/* ページ番号の並び。番号どうしは間隔を詰めて、ひとかたまりに見せる。 */
+.page-numbers {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    margin: 0;
+    list-style: none;
+}
+
+.page-number {
+    /* 桁数が違っても幅が揃うように、最小幅を決めておく */
+    min-width: 38px;
+    padding: 7px 8px;
+    font-variant-numeric: tabular-nums;
+    text-align: center;
+}
+
+/* 今いるページ。押せないので、色を反転させて現在地だと分かるようにする。 */
+.page-number.current {
+    color: #fff;
+    cursor: default;
+    background: var(--accent);
+    border-color: var(--accent);
+}
+
+.page-number.current:hover { border-color: var(--accent); }
+
+/* 省略した部分の「…」 */
+.page-gap {
+    padding: 0 2px;
+    color: var(--text-muted);
+    user-select: none;
+}
+
+/* 先頭・前へ・次へ・最終。行き先がないときは押せない見た目にする。 */
+.page-step[aria-disabled="true"] {
+    cursor: default;
+    opacity: .4;
+}
+
+.page-step[aria-disabled="true"]:hover { border-color: var(--border); }
+
+/* ---- ドラッグ＆ドロップで移動 ---- */
+
+/* 掴んでいるもの。薄くして「これを動かしている」と分かるようにする。 */
+.drag-source { opacity: .4; }
+
+/* ドラッグ中は、写真やフォルダ名の選択が始まらないようにする */
+body.dragging { user-select: none; }
+
+/* 落とせる場所を、ドラッグ中だけ分かるようにする。
+   一覧のフォルダは点線の枠で。 */
+body.dragging .folder-item {
+    border-radius: 10px;
+    outline: 1px dashed var(--text-muted);
+    outline-offset: -1px;
+}
+
+/* パンくずは flex で詰めて並んでおり、外側にはみ出す枠は
+   .breadcrumbs の overflow: hidden で切れてしまう。
+   そのため枠ではなく、文字色と点線の下線で示す。 */
+body.dragging .crumb[data-drop-path] {
+    color: var(--accent);
+    text-decoration: underline dashed;
+    text-underline-offset: 3px;
+}
+
+body.dragging .button.up[data-drop-path] {
+    border-style: dashed;
+    border-color: var(--accent);
+}
+
+/* いま狙っている落とし先 */
+body.dragging .folder-item.drop-target {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+    background: rgba(45, 108, 223, .12); /* color-mix を解さないブラウザ向け */
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+body.dragging .crumb.drop-target,
+body.dragging .button.up.drop-target {
+    padding-right: 6px;
+    padding-left: 6px;
+    color: #fff;
+    text-decoration: none;
+    background: var(--accent);
+    border-color: var(--accent);
+    border-radius: 6px;
+}
+
+/* ---- ライトボックス ---- */
+
+.lightbox {
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, .92);
+}
+
+.lightbox[hidden] { display: none; }
+
+.lb-figure {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    align-items: center;
+    max-width: 100%;
+    max-height: 100%;
+    padding: 20px;
+    margin: 0;
+}
+
+.lb-image,
+.lb-video {
+    max-width: calc(100vw - 100px);
+    max-height: calc(100vh - 100px);
+    object-fit: contain;
+}
+
+.lb-image[hidden],
+.lb-video[hidden] { display: none; }
+
+.lb-video {
+    width: auto;
+    max-height: calc(100vh - 190px); /* 上の「閉じる」と下の前後ボタンの分 */
+    background: #000;
+    outline: none;
+}
+
+.lb-caption {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    justify-content: center;
+    font-size: 13px;
+    color: #d8d8dd;
+}
+
+.lb-meta { color: #8f8f99; }
+
+.lightbox button {
+    position: absolute;
+    color: #fff;
+    cursor: pointer;
+    background: rgba(255, 255, 255, .1);
+    border: none;
+    border-radius: 50%;
+}
+
+.lb-close {
+    top: 16px;
+    right: 16px;
+    width: 42px;
+    height: 42px;
+    font-size: 24px;
+    line-height: 1;
+}
+
+.lb-prev,
+.lb-next {
+    top: 50%;
+    width: 52px;
+    height: 52px;
+    font-size: 34px;
+    line-height: 1;
+    transform: translateY(-50%);
+}
+
+.lb-prev { left: 16px; }
+.lb-next { right: 16px; }
+
+.lightbox button:hover { background: rgba(255, 255, 255, .25); }
+
+/* 前後ボタンの入れ物。写真のときは画面の左右端に置きたいので、
+   contents にして今までどおり個々のボタンを絶対配置のままにする。 */
+.lb-controls { display: contents; }
+
+/* ボタンの文字ラベル。写真のときは記号だけでよいので隠しておく。 */
+.lb-label { display: none; }
+
+/* ---- 動画のビューワー ----
+   見ている途中で閉じてしまうと、続きから見直すのが手間になる。
+   そこで動画のときは、閉じる・めくるを「押したと分かるボタン」に集約し、
+   背景をクリックしても閉じない見た目にする。 */
+
+.lightbox.viewer {
+    flex-direction: column;
+    gap: 8px;
+    background: #000;
+}
+
+.lightbox.viewer .lb-figure {
+    flex: 1 1 auto;
+    order: 1; /* 映像が先、前後ボタンはその下 */
+    justify-content: center;
+    width: 100%;
+    min-height: 0;
+    padding: 60px 20px 8px; /* 上は「閉じる」ボタンの分をあける */
+}
+
+/* 既定は「動画のオリジナルサイズ」。撮ったままの大きさで表示し、
+   画面に収まらないときだけ、縦横の比を保ったまま収まるところまで縮む。 */
+.lightbox.viewer .lb-video {
+    width: auto;
+    height: auto;
+    max-width: calc(100vw - 60px);
+}
+
+/* 設定で「画面に合わせて最大化」を選んだとき。
+   幅いっぱいまで広げ、縦がはみ出す分は箱の高さで抑える
+   （中身は contain で収まり、余白は黒なので目立たない）。 */
+body[data-video-size="fit"] .lightbox.viewer .lb-video {
+    width: 100%;
+}
+
+/* 前後ボタンは映像の下にまとめる。映像の上に重ねないので、
+   シークバーを触るつもりで押してしまうことがない。 */
+.lightbox.viewer .lb-controls {
+    display: flex;
+    flex: 0 0 auto;
+    order: 2;
+    gap: 12px;
+    justify-content: center;
+    padding-bottom: 24px;
+}
+
+.lightbox.viewer .lb-prev,
+.lightbox.viewer .lb-next {
+    position: static;
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    width: auto;
+    height: auto;
+    padding: 9px 20px;
+    font-size: 15px;
+    border-radius: 999px;
+    transform: none;
+}
+
+.lightbox.viewer .lb-close {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    width: auto;
+    height: auto;
+    padding: 9px 18px;
+    font-size: 15px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, .16);
+}
+
+.lightbox.viewer .lb-close-mark { font-size: 20px; line-height: 1; }
+
+.lightbox.viewer .lb-label { display: inline; }
+
+/* ---- 右クリック（長押し）で出る操作メニュー ---- */
+
+.context-menu {
+    position: fixed;
+    z-index: 150;
+    display: flex;
+    flex-direction: column;
+    min-width: 190px;
+    max-width: 260px;
+    padding: 5px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    box-shadow: 0 6px 24px rgba(0, 0, 0, .18);
+}
+
+.context-menu[hidden] { display: none; }
+
+.context-target {
+    padding: 6px 10px 7px;
+    margin: 0 0 4px;
+    overflow: hidden;
+    font-size: 12px;
+    color: var(--text-muted);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    border-bottom: 1px solid var(--border);
+}
+
+.context-target[hidden] { display: none; }
+
+.context-item {
+    padding: 8px 10px;
+    font-family: inherit;
+    font-size: 14px;
+    color: var(--text);
+    text-align: left;
+    cursor: pointer;
+    background: none;
+    border: none;
+    border-radius: 6px;
+}
+
+.context-item[hidden] { display: none; }
+
+.context-item:hover,
+.context-item:focus-visible {
+    background: var(--bg);
+    outline: none;
+}
+
+.context-item.danger { color: #c0362c; }
+
+/* 長押ししたときに、iOSの「画像を保存」などが割り込まないようにする */
+.card,
+.folder-item {
+    -webkit-touch-callout: none;
+}
+
+/* ---- 操作用のモーダル ---- */
+
+.modal {
+    position: fixed;
+    inset: 0;
+    z-index: 200;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    background: rgba(0, 0, 0, .5);
+}
+
+.modal[hidden] { display: none; }
+
+.modal-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    width: 100%;
+    max-width: 420px;
+    padding: 20px;
+    background: var(--panel);
+    border-radius: 12px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, .3);
+}
+
+.modal-title {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.modal-target {
+    margin: 0;
+    overflow: hidden;
+    font-size: 13px;
+    color: var(--text-muted);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.modal-field {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.modal-label {
+    font-size: 13px;
+    color: var(--text-muted);
+}
+
+.modal-panel input[type="text"],
+.modal-panel select {
+    padding: 9px 11px;
+    font-family: inherit;
+    font-size: 15px;
+    color: var(--text);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+}
+
+.modal-panel input[type="text"]:focus,
+.modal-panel select:focus {
+    outline: 2px solid var(--accent);
+    outline-offset: -1px;
+}
+
+.modal-note {
+    margin: 0;
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+/* ---- 設定の選択肢 ---- */
+
+.modal-choice {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 0;
+    margin: 0;
+    border: none;
+}
+
+.modal-choice .modal-label {
+    padding: 0;
+    margin-bottom: 4px;
+}
+
+.choice {
+    display: flex;
+    gap: 9px;
+    align-items: flex-start;
+    padding: 7px 9px;
+    cursor: pointer;
+    border-radius: 7px;
+}
+
+.choice:hover { background: var(--bg); }
+
+.choice input[type="radio"] {
+    flex-shrink: 0;
+    margin: 4px 0 0;
+    accent-color: var(--accent);
+}
+
+.choice-text {
+    display: flex;
+    flex-direction: column;
+    font-size: 14px;
+    line-height: 1.45;
+}
+
+.choice-note {
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+.modal-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+    margin-top: 4px;
+}
+
+.button.primary {
+    color: #fff;
+    background: var(--accent);
+    border-color: var(--accent);
+}
+
+.button.primary:hover { opacity: .88; }
+
+.button.danger {
+    color: #fff;
+    background: #c0362c;
+    border-color: #c0362c;
+}
+
+.button.danger:hover { opacity: .88; }
+
+.button:disabled {
+    cursor: not-allowed;
+    opacity: .5;
+}
+
+.button:disabled:hover { border-color: var(--border); }
+
+.actions-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    min-width: 0;
+    padding: 0;
+    margin: 0;
+}
+
+/* 「上のフォルダへ」は他の操作と役割が違うので、少し離して置く */
+.button.up {
+    margin-left: 12px;
+    color: var(--accent);
+}
+
+.button-icon {
+    font-size: 15px;
+    line-height: 1;
+}
+
+/* 「⋯ メニュー」ボタン。押すと右クリックと同じ操作メニューが下に出る。
+   検索・並び替えの右隣（.toolbar が margin-left: auto なので自然と右端）に置く。 */
+.menu-button,
+.settings-button { flex-shrink: 0; }
+
+/* 歯車は字面が小さめなので、少し大きくして他のボタンと高さをそろえる */
+.settings-button .button-icon { font-size: 16px; }
+
+/* 「⋯」は小さく見えるので、少しだけ大きく・上に寄せて字面をそろえる */
+.menu-button .button-icon {
+    position: relative;
+    top: -1px;
+    font-size: 17px;
+    letter-spacing: 1px;
+}
+
+/* ---- 複数選択 ---- */
+
+.selection-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    padding: 10px 12px;
+    margin: 0 20px 12px;
+    background: var(--panel);
+    border: 1px solid var(--accent);
+    border-radius: 9px;
+}
+
+.selection-bar[hidden] { display: none; }
+
+.selection-count {
+    font-size: 13px;
+    color: var(--text-muted);
+}
+
+.selection-hint {
+    margin-right: auto;
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+.card,
+.folder-item { position: relative; }
+
+.select-box {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    z-index: 2;
+    display: none;
+    padding: 4px;
+    background: var(--panel);
+    border-radius: 6px;
+    box-shadow: var(--shadow);
+}
+
+.select-box input {
+    display: block;
+    width: 18px;
+    height: 18px;
+    margin: 0;
+    cursor: pointer;
+    accent-color: var(--accent);
+}
+
+body.selecting .select-box { display: block; }
+
+/* 選択モード中は、Shift＋クリックで文字やサムネイルが反転しないようにする */
+body.selecting .folders,
+body.selecting .grid { user-select: none; }
+
+/* チェックボックスがフォルダのアイコンに重ならないようにずらす */
+body.selecting .folder-item .folder { padding-left: 44px; }
+
+/* 背景をドラッグして囲んだ範囲を示す枠 */
+.rubber-band {
+    position: absolute;
+    z-index: 50;
+    pointer-events: none;
+    background: rgba(45, 108, 223, .14); /* color-mix を解さないブラウザ向け */
+    background: color-mix(in srgb, var(--accent) 14%, transparent);
+    border: 1px solid var(--accent);
+    border-radius: 3px;
+}
+
+/* 枠を描いているあいだは、文字が反転しないようにする */
+body.band-selecting { user-select: none; }
+
+/* 選んだものを見分けやすくする */
+.card:has([data-select]:checked),
+.folder-item:has([data-select]:checked) .folder {
+    border-color: var(--accent);
+    outline: 2px solid var(--accent);
+}
+
+/* ---- フォルダの説明の編集 ---- */
+
+/* 入力する欄が多いので、この画面だけ横を広く、縦にはみ出したら送れるようにする */
+.modal-panel.wide {
+    max-width: 620px;
+    max-height: calc(100vh - 40px);
+    overflow-y: auto;
+}
+
+/* サムネイルの候補を、絵を見ながら選べるように並べる */
+.thumb-picker {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(88px, 1fr));
+    gap: 8px;
+    max-height: 260px;
+    padding: 2px;
+    overflow-y: auto;
+}
+
+.thumb-pick {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    cursor: pointer;
+}
+
+/* ラジオそのものは出さず、選んだものを枠で示す */
+.thumb-pick input {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+}
+
+.thumb-pick-box {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    aspect-ratio: 4 / 3;
+    overflow: hidden;
+    font-size: 12px;
+    color: var(--text-muted);
+    background: var(--bg);
+    border: 2px solid var(--border);
+    border-radius: 8px;
+}
+
+.thumb-pick-box img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.thumb-pick input:checked + .thumb-pick-box {
+    border-color: var(--accent);
+}
+
+.thumb-pick input:focus-visible + .thumb-pick-box {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+.thumb-pick-name {
+    overflow: hidden;
+    font-size: 11px;
+    color: var(--text-muted);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* 項目の行。見出し・内容・リンクと、並べ替えのボタン。 */
+.info-rows {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.info-row {
+    display: grid;
+    grid-template-columns: 1fr 1.4fr 1.4fr auto;
+    gap: 6px;
+    align-items: center;
+}
+
+.info-row[hidden] { display: none; }
+
+/* 入力欄の既定の幅のままだと、枠からはみ出して並べ替えのボタンが隠れる */
+.info-row input {
+    min-width: 0;
+    width: 100%;
+}
+
+.info-row-tools {
+    display: flex;
+    gap: 2px;
+}
+
+.row-button {
+    padding: 6px 8px;
+    font-size: 13px;
+    line-height: 1;
+    color: var(--text-muted);
+    cursor: pointer;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+}
+
+.row-button:hover {
+    color: var(--text);
+    border-color: var(--accent);
+}
+
+/* 狭い画面では、1行ぶんを縦に積む */
+@media (max-width: 600px) {
+    .info-row {
+        grid-template-columns: 1fr;
+        gap: 4px;
+        padding: 8px;
+        background: var(--bg);
+        border-radius: 8px;
+    }
+}
+
+.modal-note code {
+    padding: 1px 4px;
+    font-size: 12px;
+    background: var(--bg);
+    border-radius: 4px;
+}
+
+/* ---- リスト表示 ---- */
+
+/* 表示の切り替えボタン。押すと切り替わる側だけを見せる。 */
+.view-button { flex-shrink: 0; }
+
+.view-option {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
+
+body[data-view="grid"] .only-list,
+body[data-view="list"] .only-grid { display: none; }
+
+/* 1行ずつ並べる。マス目の指定を打ち消して、縦に積むだけにする。 */
+body[data-view="list"] .folders,
+body[data-view="list"] .grid {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+body[data-view="list"] .folders { margin-bottom: 14px; }
+
+body[data-view="list"] .folder {
+    min-height: 0;
+    padding: 9px 12px;
+    border-radius: 8px;
+}
+
+body[data-view="list"] .card {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    padding: 6px 12px 6px 6px;
+    border-radius: 8px;
+    cursor: pointer;
+}
+
+body[data-view="list"] .card:hover { border-color: var(--accent); }
+
+/* いま詳細を出している行。左の線で、どれを見ているか分かるようにする。 */
+body[data-view="list"] .card.current {
+    border-color: var(--accent);
+    box-shadow: inset 3px 0 0 var(--accent), var(--shadow);
+}
+
+body[data-view="list"] .thumb {
+    flex-shrink: 0;
+    width: 52px;
+    height: 52px;
+    overflow: hidden;
+    aspect-ratio: auto;
+    border-radius: 6px;
+}
+
+/* 小さいサムネイルの上では、再生マークも小さくする */
+body[data-view="list"] .play-badge {
+    width: 22px;
+    height: 22px;
+    padding-left: 2px;
+    font-size: 10px;
+}
+
+/* 名前とサイズ・日付を1行に並べる */
+body[data-view="list"] .caption {
+    flex: 1;
+    flex-direction: row;
+    gap: 12px;
+    align-items: baseline;
+    min-width: 0;
+    padding: 0;
+}
+
+body[data-view="list"] .file-name {
+    flex: 1;
+    min-width: 0;
+    font-size: 14px;
+}
+
+body[data-view="list"] .file-meta { flex-shrink: 0; }
+
+/* 選択モードのチェックボックス。リストではサムネイルに重ねず、行の左に置く。 */
+body[data-view="list"].selecting .card .select-box {
+    position: static;
+    padding: 0 0 0 4px;
+    background: none;
+    box-shadow: none;
+}
+
+/* ---- キーボードでのフォーカス ---- */
+
+/* Tab で一覧に入り、矢印キーで動かしたときに、いまどこにいるかを見せる。
+   .card は overflow: hidden なので、枠は内側（outline-offset を負の値に）へ出す。 */
+.thumb:focus-visible {
+    outline: 3px solid var(--accent);
+    outline-offset: -3px;
+}
+
+.folder:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+/* リストではサムネイルが小さいので、囲むのは行のほうにする */
+body[data-view="list"] .thumb:focus-visible { outline: none; }
+
+body[data-view="list"] .card:has(.thumb:focus-visible) {
+    border-color: var(--accent);
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+}
+
+/* ---- フォルダの説明（info.yml） ---- */
+
+/* 広い画面では一覧の左に置き、詳細パネルと同じようにヘッダーの下へ貼り付ける。
+   --header-h には app.js が実際のヘッダーの高さを入れる。 */
+.info-panel {
+    position: sticky;
+    top: calc(var(--header-h, 72px) + 14px);
+    flex: 0 0 500px;
+    max-height: calc(100vh - var(--header-h, 72px) - 28px);
+    padding: 14px;
+    overflow-y: auto;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    box-shadow: var(--shadow);
+}
+
+.info-thumb {
+    margin-bottom: 12px;
+    overflow: hidden;
+    background: var(--bg);
+    border-radius: 8px;
+}
+
+.info-thumb img {
+    display: block;
+    width: 100%;
+    height: auto;
+}
+
+.info-title {
+    margin: 0 0 12px;
+    font-size: 16px;
+    font-weight: 600;
+    line-height: 1.45;
+}
+
+.info-list {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 6px 12px;
+    margin: 0;
+    font-size: 13px;
+}
+
+.info-list dt {
+    color: var(--text-muted);
+    white-space: nowrap;
+}
+
+.info-list dd {
+    margin: 0;
+    overflow-wrap: anywhere;
+}
+
+/* ---- 詳細パネル ---- */
+
+/* 貼り付いたヘッダーの下に収まるよう、--header-h（app.js が実際の高さを入れる）を使う */
+.detail-panel {
+    position: sticky;
+    top: calc(var(--header-h, 72px) + 14px);
+    flex: 0 0 300px;
+    max-height: calc(100vh - var(--header-h, 72px) - 28px);
+    padding: 14px;
+    overflow-y: auto;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    box-shadow: var(--shadow);
+}
+
+.detail-panel[hidden] { display: none; }
+
+/* グリッド表示に戻したときは、開いたままでも引っ込める */
+body[data-view="grid"] .detail-panel { display: none; }
+
+.detail-head {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.detail-title {
+    flex: 1;
+    margin: 0;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-muted);
+}
+
+.detail-close {
+    flex-shrink: 0;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    font-size: 18px;
+    line-height: 1;
+    color: var(--text-muted);
+    cursor: pointer;
+    background: none;
+    border: 0;
+    border-radius: 6px;
+}
+
+.detail-close:hover {
+    color: var(--text);
+    background: var(--bg);
+}
+
+.detail-thumb {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    aspect-ratio: 4 / 3;
+    margin-bottom: 12px;
+    overflow: hidden;
+    cursor: zoom-in;
+    background: var(--bg);
+    border-radius: 8px;
+}
+
+.detail-thumb img,
+.detail-thumb video {
+    display: block;
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+}
+
+/* 長いファイル名は折り返す（省略すると、何のファイルか分からなくなる） */
+.detail-name {
+    margin: 0 0 10px;
+    font-size: 14px;
+    font-weight: 600;
+    word-break: break-all;
+}
+
+.detail-list {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 4px 12px;
+    margin: 0 0 14px;
+    font-size: 13px;
+}
+
+.detail-list dt {
+    color: var(--text-muted);
+    white-space: nowrap;
+}
+
+.detail-list dd {
+    margin: 0;
+    word-break: break-all;
+}
+
+.detail-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+/* ---- 画面が狭いとき ---- */
+
+@media (max-width: 600px) {
+    .header { gap: 8px 10px; padding: 10px 14px; }
+    .content { padding: 12px 14px 32px; }
+    .selection-bar { margin: 0 14px 12px; }
+    .button.up { margin-left: 0; }
+
+    /* 1行に収まらないので、検索・並び替えを次の行いっぱいに置く。
+       メニューは幅を取らないので、order で1行目（の右端）に残す。 */
+    .toolbar {
+        order: 1;
+        flex-shrink: 1;
+        width: 100%;
+        margin-left: 0;
+    }
+
+    /* 狭い画面では「メニュー」の文字を畳んで「⋯」だけにし、
+       「上のフォルダへ」と同じ行に収める */
+    .menu-button {
+        margin-left: auto;
+        padding: 7px 12px;
+    }
+
+    .menu-button-label { display: none; }
+
+    /* パンくずを縮められるようにして、1行目に「上へ」と「⋯」を収める */
+    .breadcrumbs { flex: 1 1 0; }
+
+    .field.search { flex: 1; min-width: 0; }
+    .field.search input { width: 100%; }
+    .crumb { max-width: 12ch; }
+    .grid { gap: 10px; }
+
+    .lb-image,
+    .lb-video {
+        max-width: 100vw;
+        max-height: calc(100vh - 120px);
+    }
+
+    .lightbox.viewer .lb-figure { padding: 56px 8px 4px; }
+
+    .lightbox.viewer .lb-video { max-height: calc(100vh - 170px); }
+
+    .lb-prev, .lb-next {
+        width: 44px;
+        height: 44px;
+        font-size: 28px;
+    }
+
+    /* スマートフォンではグリッドを使わずリスト固定にする（app.js が切り替える）。
+       選びようがないので、ヘッダーの切り替えボタンと設定の項目は出さない。 */
+    .view-button,
+    .view-choice { display: none; }
+}
+
+/* ---- 動画のビューワーの「閉じる」 ---- */
+
+/* マウスの使える環境＝キーボードもある環境とみなし、「閉じる」ボタンを出さない。
+   Esc キーで閉じられるので、映像の上に置くものを減らして見やすくする。
+   キーボードのない端末では、これがないと閉じる手立てがなくなるため残す。 */
+@media (hover: hover) and (pointer: fine) {
+    .lightbox.viewer .lb-close { display: none; }
+
+    /* ボタンの分としてあけていた上の余白を詰め、そのぶん映像を大きく見せる */
+    .lightbox.viewer .lb-figure { padding-top: 20px; }
+
+    .lightbox.viewer .lb-video { max-height: calc(100vh - 150px); }
+}
+
+/* 横に並べる幅がないときは、詳細を画面の下から出す。
+   一覧の右に置くと、どちらも細くなって読みにくいため。 */
+@media (max-width: 760px) {
+    /* フォルダの説明は、一覧の左ではなく上に積む */
+    .content {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .info-panel {
+        position: static;
+        flex: none;
+        max-height: none;
+    }
+
+    /* 説明で画面が埋まらないよう、サムネイルの高さを抑える */
+    .info-thumb img {
+        max-height: 26vh;
+        object-fit: cover;
+    }
+
+    .detail-panel {
+        position: fixed;
+        top: auto;
+        right: 0;
+        bottom: 0;
+        left: 0;
+        z-index: 20;
+        flex: none;
+        max-height: 58vh;
+        border-width: 1px 0 0;
+        border-radius: 12px 12px 0 0;
+    }
+
+    /* 一覧の見える範囲が狭くなりすぎないよう、サムネイルの高さを抑える */
+    .detail-thumb {
+        aspect-ratio: 16 / 9;
+        max-height: 20vh;
+    }
+
+    /* 一覧の最後の行が、下から出た詳細に隠れないようにする */
+    body[data-view="list"].detail-open .content { padding-bottom: 62vh; }
+}

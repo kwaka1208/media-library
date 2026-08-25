@@ -1,0 +1,65 @@
+# ---------------------------------------------------------------
+# Media Library : アクセス制限とBasic認証の設定（見本）
+#
+# 使い方
+#   1) このファイルを .htaccess という名前でコピーする
+#        cp .htaccess.example .htaccess
+#   2) Basic認証を使う場合だけ、下の「Basic認証」の4行を有効にする
+#
+# .htaccess は .gitignore に入れてあるため、リポジトリには含まれません。
+# 認証情報の置き場所（絶対パス）はサーバーごとに違うので、
+# 各自の環境で作る形にしています。
+# ---------------------------------------------------------------
+
+# Basic認証（任意）
+# 既定では無効にしてある。閲覧できる人を限定したいときだけ、
+# 下の4行のコメント（#）を外して使う。
+#
+# AuthUserFile は「サーバー上の絶対パス」で指定する必要がある。
+# 下の行は見本なので、設置先の絶対パスに必ず書き換えること。
+# 書き換えないと認証が動かず、サーバーエラー（500）になる。
+#
+#   例: AuthUserFile /home/user/www/media-library/.htpasswd
+#
+# 絶対パスがわからないときは、次の内容の path.php を一時的に置いて
+# ブラウザで開くと確認できる（確認したら必ず削除すること）。
+#
+#   <?php echo __DIR__;
+#AuthType Basic
+#AuthName "Media Library"
+#AuthUserFile /path/to/media-library/.htpasswd
+#Require valid-user
+
+# 既定のインデックス
+DirectoryIndex index.php
+
+# ディレクトリの中身が一覧表示されるのを防ぐ
+Options -Indexes
+
+# 設定ファイル・パスワードファイル・見本ファイルへの直接アクセスを禁止する
+<FilesMatch "^(config\.php|\.htpasswd.*|.*\.sample|.*\.example|.*\.md)$">
+    <IfModule mod_authz_core.c>
+        Require all denied
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Order allow,deny
+        Deny from all
+    </IfModule>
+</FilesMatch>
+
+# 文字コード
+<IfModule mod_mime.c>
+    AddDefaultCharset UTF-8
+</IfModule>
+
+# HTTPSへのリダイレクト
+# Basic認証は認証情報をほぼそのまま送るため、有効にするなら必ずHTTPSで使うこと。
+# 認証を使わない場合も、通信内容を守るためHTTPSを推奨する。
+# 利用しているサーバーでSSL証明書（Let's Encrypt など）を有効にし、
+# 発行が完了してから下の4行のコメント（#）を外す。
+# SSLの準備前に有効にすると、サイトに一切アクセスできなくなるので注意。
+#<IfModule mod_rewrite.c>
+#    RewriteEngine On
+#    RewriteCond %{HTTPS} !=on
+#    RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [R=301,L]
+#</IfModule>

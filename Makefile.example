@@ -1,0 +1,130 @@
+# ---------------------------------------------------------------
+# Media Library : デプロイ用 Makefile（見本）
+#
+# 使い方
+#   1) このファイルを Makefile という名前でコピーする
+#        cp Makefile.example Makefile
+#   2) 下の SSH_HOST と REMOTE_DIR を、自分のサーバーに合わせて書き換える
+#
+# 併せて .htaccess.example も .htaccess としてコピーしておくこと
+# （make deploy はローカルの .htaccess をそのまま転送します）
+#
+# Makefile は .gitignore に入れてあるため、リポジトリには含まれません。
+# 接続先はサーバーごとに違うので、各自の手元だけで持つ形にしています。
+#
+#   make help      使えるコマンドの一覧
+#   make diff      サーバーとの差分を確認（転送はしない）
+#   make deploy    サーバーへ反映
+# ---------------------------------------------------------------
+
+# 転送先。自分のサーバーに合わせて書き換えてください。
+#   SSH_HOST   … SSHのログイン先（ユーザー名@ホスト名）
+#   REMOTE_DIR … サーバー上の設置先（絶対パス）
+SSH_HOST   := user@example.com
+REMOTE_DIR := /home/user/www/media-library
+LOCAL_DIR  := .
+PORT       := 8765
+
+# 転送ルール。
+#   photos/ movies/ の中身 … サーバー上の写真・動画を消さないため
+#                            （中身は make deploy-media で送る）
+#                            ただし .htaccess はツールの一部なので転送する
+#   .htpasswd             … サーバー上の認証情報を上書きしないため
+#                            （make deploy-htpasswd で送る）
+#   *.example             … 見本ファイルはサーバーに置く必要がないため
+# rsync はルールを書いた順に評価するので、include を exclude より先に置く。
+FILTERS := \
+	--include 'photos/' \
+	--include 'photos/.htaccess' \
+	--exclude 'photos/**' \
+	--include 'movies/' \
+	--include 'movies/.htaccess' \
+	--exclude 'movies/**' \
+	--exclude '.git/' \
+	--exclude '.gitignore' \
+	--exclude '.DS_Store' \
+	--exclude 'Makefile' \
+	--exclude '*.example' \
+	--exclude '.htpasswd'
+
+# --delete は使わない。サーバー側のファイルを削除する事故を防ぐため。
+RSYNC_OPTS := -avz --checksum --no-perms --no-owner --no-group $(FILTERS)
+
+.PHONY: help lint diff deploy deploy-media deploy-htpasswd serve ssh htpasswd remote-init
+
+.DEFAULT_GOAL := help
+
+help:
+	@echo "Media Library — 使えるコマンド"
+	@echo ""
+	@echo "  make lint          PHPの構文チェック"
+	@echo "  make serve         ローカルで動作確認（http://127.0.0.1:$(PORT)/）"
+	@echo ""
+	@echo "  make diff          サーバーとの差分を確認（転送はしない）"
+	@echo "  make deploy        サーバーへ反映（photos/ movies/ と .htpasswd は除く）"
+	@echo "  make deploy-media  photos/ movies/ の中身もサーバーへ追加転送する"
+	@echo ""
+	@echo "  make remote-init   サーバー側に photos/ movies/ を作る（初回のみ）"
+	@echo "  make htpasswd         .htpasswd を作る（対話入力）"
+	@echo "  make deploy-htpasswd  .htpasswd をサーバーへ転送"
+	@echo "  make ssh           サーバーにSSHでログイン"
+	@echo ""
+	@echo "  転送先: $(SSH_HOST):$(REMOTE_DIR)"
+
+# ---- ローカル作業 ---------------------------------------------
+
+lint:
+	@find . -name '*.php' -not -path './.git/*' -print0 | xargs -0 -n1 php -l
+
+serve:
+	@echo "http://127.0.0.1:$(PORT)/ を開いてください（Ctrl+C で停止）"
+	@php -S 127.0.0.1:$(PORT)
+
+htpasswd:
+	@printf 'ユーザー名: '; read u; \
+	printf 'パスワード: '; stty -echo; read p; stty echo; echo; \
+	if [ -z "$$u" ] || [ -z "$$p" ]; then echo '入力が空です。中止しました。'; exit 1; fi; \
+	php make-htpasswd.php "$$u" "$$p" > .htpasswd; \
+	echo '.htpasswd を作成しました。make deploy-htpasswd でサーバーへ転送できます。'
+
+# ---- サーバーへの反映 -----------------------------------------
+
+diff: lint
+	@echo "=== 転送される差分（実際には転送しません） ==="
+	@rsync $(RSYNC_OPTS) --dry-run --itemize-changes $(LOCAL_DIR)/ $(SSH_HOST):$(REMOTE_DIR)/
+
+deploy: lint
+	@test -f .htaccess || { echo ".htaccess がありません。cp .htaccess.example .htaccess で作成してください。"; exit 1; }
+	@echo "$(SSH_HOST):$(REMOTE_DIR)/ へ反映します。"
+	@rsync $(RSYNC_OPTS) $(LOCAL_DIR)/ $(SSH_HOST):$(REMOTE_DIR)/
+	@echo "完了しました。"
+
+# photos/ movies/ は通常の deploy では転送しない。
+# 写真や動画を送りたいときだけ明示的に実行する。
+# こちらも --delete は付けないので、サーバー側にしかないファイルは残る。
+# .trash/ は手元とサーバーで中身が違って当然なので、転送の対象から外している。
+deploy-media:
+	@for d in photos movies; do \
+		echo "$$d/ の中身を $(SSH_HOST):$(REMOTE_DIR)/$$d/ へ転送します。"; \
+		rsync -avz --no-perms --no-owner --no-group \
+			--exclude '.DS_Store' \
+			--exclude '.trash/' \
+			$$d/ $(SSH_HOST):$(REMOTE_DIR)/$$d/ || exit 1; \
+	done
+	@echo "完了しました。"
+
+# .htpasswd はうっかり上書きしないよう、単独のコマンドに分けている。
+deploy-htpasswd:
+	@test -f .htpasswd || { echo ".htpasswd がありません。make htpasswd で作成してください。"; exit 1; }
+	@echo "サーバー上の .htpasswd を上書きします。"
+	@rsync -avz --no-perms --no-owner --no-group .htpasswd $(SSH_HOST):$(REMOTE_DIR)/.htpasswd
+	@echo "完了しました。"
+
+# ---- サーバー側の準備 -----------------------------------------
+
+remote-init:
+	@ssh $(SSH_HOST) 'mkdir -p $(REMOTE_DIR)/photos $(REMOTE_DIR)/movies && chmod 755 $(REMOTE_DIR) $(REMOTE_DIR)/photos $(REMOTE_DIR)/movies'
+	@echo "$(REMOTE_DIR)/photos と $(REMOTE_DIR)/movies を作成しました。"
+
+ssh:
+	@ssh $(SSH_HOST)
