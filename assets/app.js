@@ -59,6 +59,12 @@
         document.body.style.overflow = 'hidden';
     }
 
+    // 書きかけが消えると困る画面は、data-modal-keep を付けておく。
+    // 「キャンセル」を押したときだけ閉じ、外側のクリックや Esc では閉じない。
+    function modalKeepsOpen() {
+        return openedModal !== null && openedModal.hasAttribute('data-modal-keep');
+    }
+
     function closeModal() {
         if (!openedModal) {
             return;
@@ -1304,7 +1310,12 @@
         }
 
         // 「キャンセル」ボタンと、パネルの外側のクリックで閉じる
-        if (target.closest('[data-modal-close]') || (openedModal && target === openedModal)) {
+        if (target.closest('[data-modal-close]')) {
+            closeModal();
+            return;
+        }
+
+        if (openedModal && target === openedModal && !modalKeepsOpen()) {
             closeModal();
         }
     });
@@ -1323,7 +1334,12 @@
 
         if (openedModal) {
             event.preventDefault();
-            closeModal();
+
+            // 書きかけを消さない画面は、Esc では閉じない
+            if (!modalKeepsOpen()) {
+                closeModal();
+            }
+
             return;
         }
 

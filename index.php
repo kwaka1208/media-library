@@ -608,7 +608,7 @@ if ($error === null) {
 
 <!-- 新しいフォルダ -->
 <?php // フォルダ情報（info.yml）の編集。右クリックまたは「⋯ メニュー」から開く。 ?>
-<div class="modal" id="infoModal" hidden>
+<div class="modal" id="infoModal" hidden data-modal-keep>
     <form class="modal-panel wide" method="post" action="action.php">
         <h2 class="modal-title">フォルダ情報</h2>
 
@@ -739,7 +739,7 @@ if ($error === null) {
 
         <div class="modal-actions">
             <button type="button" class="button" data-modal-close>キャンセル</button>
-            <button type="submit" class="button primary">保存する</button>
+            <button type="submit" class="button primary">保存</button>
         </div>
     </form>
 </div>
