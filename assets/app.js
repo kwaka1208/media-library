@@ -59,14 +59,18 @@
         document.body.style.overflow = 'hidden';
     }
 
-    // 書きかけが消えると困る画面は、data-modal-keep を付けておく。
-    // 「キャンセル」を押したときだけ閉じ、外側のクリックや Esc では閉じない。
-    function modalKeepsOpen() {
-        return openedModal !== null && openedModal.hasAttribute('data-modal-keep');
-    }
-
-    function closeModal() {
+    // 書きかけが消えると困る画面には、data-modal-keep を付けておく。
+    // 閉じるのは「キャンセル」を押したときと、保存して画面が切り替わるときだけ。
+    // 外側のクリックや Esc など、ほかのきっかけでは閉じない。
+    //
+    // 判断を closeModal() の中で行うので、どこから呼ばれても取りこぼさない。
+    // 明示的に閉じたいときは closeModal(true) を使う。
+    function closeModal(force) {
         if (!openedModal) {
+            return;
+        }
+
+        if (!force && openedModal.hasAttribute('data-modal-keep')) {
             return;
         }
 
@@ -1309,13 +1313,14 @@
             return;
         }
 
-        // 「キャンセル」ボタンと、パネルの外側のクリックで閉じる
+        // 「キャンセル」ボタンは、どの画面でも閉じる
         if (target.closest('[data-modal-close]')) {
-            closeModal();
+            closeModal(true);
             return;
         }
 
-        if (openedModal && target === openedModal && !modalKeepsOpen()) {
+        // パネルの外側のクリック。data-modal-keep の画面では閉じない。
+        if (openedModal && target === openedModal) {
             closeModal();
         }
     });
@@ -1335,11 +1340,8 @@
         if (openedModal) {
             event.preventDefault();
 
-            // 書きかけを消さない画面は、Esc では閉じない
-            if (!modalKeepsOpen()) {
-                closeModal();
-            }
-
+            // data-modal-keep の画面は、closeModal() の中で閉じずに戻ってくる
+            closeModal();
             return;
         }
 

@@ -175,7 +175,7 @@ if ($info !== null && $info['title'] !== '') {
 }
 ?>
 <title><?= h($pageName . ' | ' . $config['title']) ?></title>
-<link rel="stylesheet" href="assets/style.css?v=21">
+<link rel="stylesheet" href="assets/style.css?v=22">
 <style>:root { --thumb-size: <?= (int) $config['thumb_size'] ?>px; }</style>
 </head>
 <body data-video-muted="<?= h($videoMuted) ?>" data-video-size="<?= h($videoSize) ?>"
@@ -883,6 +883,6 @@ if ($error === null) {
     </figure>
 </div>
 
-<script src="assets/app.js?v=21"></script>
+<script src="assets/app.js?v=22"></script>
 </body>
 </html>
