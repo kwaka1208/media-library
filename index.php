@@ -51,7 +51,7 @@ if ($dir === null) {
 if ($dir !== null && $error === null) {
     $scanned = pv_scan($dir, $extensions);
 
-    // フォルダに置かれた説明（info.yml）を、ここで1回だけ読む。
+    // フォルダに置かれた情報（info.yml）を、ここで1回だけ読む。
     // 絞り込みでも一覧の表示でも使うため。
     foreach ($scanned['dirs'] as $index => $item) {
         $childPath = $relative === '' ? $item['name'] : $relative . '/' . $item['name'];
@@ -75,7 +75,7 @@ if ($dir !== null && $error === null) {
     }
 }
 
-// ---- フォルダに置かれた説明（info.yml）---------------------------
+// ---- フォルダに置かれた情報（info.yml）---------------------------
 // 開いているフォルダに info.yml があれば、その中身を一覧の横に出す。
 $info = $error === null ? pv_read_info($config, $relative) : null;
 
@@ -167,7 +167,7 @@ $navArgs = ['q' => ''] + $keepArgs;
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
 <?php
-// タブに出る名前。説明のあるフォルダでは、そのタイトルを使う。
+// タブに出る名前。情報のあるフォルダでは、そのタイトルを使う。
 $pageName = $relative === '' ? $rootLabel : $relative;
 
 if ($info !== null && $info['title'] !== '') {
@@ -291,11 +291,79 @@ if ($info !== null && $info['title'] !== '') {
 
 </div><!-- /.page-header -->
 
+<?php
+// ページ送りのリンクを組み立てるための小さな関数。
+// path と並び順・検索語（$keepArgs）はそのままに、ページ番号だけを差し替える。
+$pageUrl = function (int $target) use ($relative, $keepArgs) {
+    return pv_url(['path' => $relative, 'page' => $target] + $keepArgs);
+};
+
+// 枚数とページ送りの帯。フォルダ情報があるときはその下に、
+// ないときは一覧の上に置く。出す場所が2か所あるので、先に組み立てておく。
+$listingBar = '';
+
+if ($error === null) {
+    ob_start();
+    ?>
+    <div class="listing-bar">
+        <p class="summary">
+            <?php if ($keyword !== ''): ?>
+                「<?= h($keyword) ?>」に一致する<?= h($rootLabel) ?> <?= $totalFiles ?> <?= h($unit) ?>
+            <?php else: ?>
+                <?= h($rootLabel) ?> <?= $totalFiles ?> <?= h($unit) ?>
+            <?php endif; ?>
+            <?php if ($totalPages > 1): ?>
+                <span class="page-indicator"><?= $page ?> / <?= $totalPages ?> ページ</span>
+            <?php endif; ?>
+        </p>
+
+        <?php if ($totalPages > 1): ?>
+            <nav class="pagination" aria-label="ページ送り">
+                <?php if ($page > 1): ?>
+                    <a class="button page-step" href="<?= h($pageUrl(1)) ?>" aria-label="先頭ページへ">&laquo; 先頭</a>
+                    <a class="button page-step" href="<?= h($pageUrl($page - 1)) ?>" rel="prev">&lsaquo; 前へ</a>
+                <?php else: ?>
+                    <span class="button page-step" aria-disabled="true">&laquo; 先頭</span>
+                    <span class="button page-step" aria-disabled="true">&lsaquo; 前へ</span>
+                <?php endif; ?>
+
+                <ol class="page-numbers">
+                    <?php foreach (pv_page_numbers($page, $totalPages) as $number): ?>
+                        <?php if ($number === 0): ?>
+                            <li class="page-gap" aria-hidden="true">…</li>
+                        <?php elseif ($number === $page): ?>
+                            <li><span class="button page-number current" aria-current="page"><?= $number ?></span></li>
+                        <?php else: ?>
+                            <li>
+                                <a class="button page-number" href="<?= h($pageUrl($number)) ?>"
+                                   aria-label="<?= $number ?> ページ目へ"><?= $number ?></a>
+                            </li>
+                        <?php endif; ?>
+                    <?php endforeach; ?>
+                </ol>
+
+                <?php if ($page < $totalPages): ?>
+                    <a class="button page-step" href="<?= h($pageUrl($page + 1)) ?>" rel="next">次へ &rsaquo;</a>
+                    <a class="button page-step" href="<?= h($pageUrl($totalPages)) ?>" aria-label="最終ページへ">最終 &raquo;</a>
+                <?php else: ?>
+                    <span class="button page-step" aria-disabled="true">次へ &rsaquo;</span>
+                    <span class="button page-step" aria-disabled="true">最終 &raquo;</span>
+                <?php endif; ?>
+            </nav>
+        <?php endif; ?>
+    </div>
+    <?php
+    $listingBar = ob_get_clean();
+}
+?>
+
 <main class="content">
 
 <?php if ($info !== null): ?>
-<?php // info.yml のあるフォルダで出す説明。広い画面では一覧の左、狭い画面では上。 ?>
-<aside class="info-panel" aria-label="このフォルダの説明">
+<?php // info.yml のあるフォルダで出す情報。広い画面では一覧の左、狭い画面では上。
+      // 枚数とページ送りは、その情報の下にそろえて置く。 ?>
+<div class="side">
+<aside class="info-panel" aria-label="このフォルダの情報">
     <?php if ($info['thumb'] !== null): ?>
         <div class="info-thumb">
             <img src="<?= h($info['thumb']['url']) ?>" alt="" loading="lazy" decoding="async">
@@ -325,6 +393,9 @@ if ($info !== null && $info['title'] !== '') {
         </dl>
     <?php endif; ?>
 </aside>
+
+<?= $listingBar ?>
+</div><!-- /.side -->
 <?php endif; ?>
 
 <div class="listing">
@@ -378,42 +449,8 @@ if ($info !== null && $info['title'] !== '') {
     </ul>
 <?php endif; ?>
 
-<?php if ($error === null): ?>
-    <p class="summary">
-        <?php if ($keyword !== ''): ?>
-            「<?= h($keyword) ?>」に一致する<?= h($rootLabel) ?> <?= $totalFiles ?> <?= h($unit) ?>
-        <?php else: ?>
-            <?= h($rootLabel) ?> <?= $totalFiles ?> <?= h($unit) ?>
-        <?php endif; ?>
-        <?php if ($totalPages > 1): ?>
-            <span class="page-indicator"><?= $page ?> / <?= $totalPages ?> ページ</span>
-        <?php endif; ?>
-    </p>
-<?php endif; ?>
-
-<?php
-// 見せ方で変わる文言は、グリッド用とリスト用の両方を書き出しておき、
-// いま選んでいるほうだけを CSS で見せる。
-// そのため、この配列にはエスケープ済みのHTMLを入れている。
-$hints = [];
-if ($files !== []) {
-    $act = $config['root_kind'] === 'video' ? '再生' : '拡大';
-    $hints[] = '<span class="only-grid">クリックで' . h($act) . '</span>'
-             . '<span class="only-list">クリックで詳細・ダブルクリックで' . h($act) . '</span>';
-}
-if ($canEdit) {
-    $hints[] = h('右クリック（スマホは長押し）で操作メニュー');
-}
-if ($canEdit && ($files !== [] || $dirs !== [])) {
-    $hints[] = h('フォルダへドラッグして移動');
-    $hints[] = h('⌘（Windows は Ctrl）＋クリック・背景のドラッグで複数選択');
-}
-if ($parent !== null) {
-    $hints[] = h('Backspace で上のフォルダへ');
-}
-?>
-<?php if ($hints !== []): ?>
-    <p class="hint"><?= implode(' ・ ', $hints) ?></p>
+<?php if ($info === null): ?>
+    <?= $listingBar ?>
 <?php endif; ?>
 
 <?php if ($files === [] && $error === null): ?>
@@ -464,93 +501,52 @@ if ($parent !== null) {
     <?php endforeach; ?>
 </div>
 
-<?php if ($totalPages > 1): ?>
-    <?php
-    // ページ送りのリンクを組み立てるための小さな関数。
-    // path と並び順・検索語（$keepArgs）はそのままに、ページ番号だけを差し替える。
-    $pageUrl = function (int $target) use ($relative, $keepArgs) {
-        return pv_url(['path' => $relative, 'page' => $target] + $keepArgs);
-    };
-    ?>
-    <nav class="pagination" aria-label="ページ送り">
-        <?php if ($page > 1): ?>
-            <a class="button page-step" href="<?= h($pageUrl(1)) ?>" aria-label="先頭ページへ">&laquo; 先頭</a>
-            <a class="button page-step" href="<?= h($pageUrl($page - 1)) ?>" rel="prev">&lsaquo; 前へ</a>
-        <?php else: ?>
-            <span class="button page-step" aria-disabled="true">&laquo; 先頭</span>
-            <span class="button page-step" aria-disabled="true">&lsaquo; 前へ</span>
-        <?php endif; ?>
-
-        <ol class="page-numbers">
-            <?php foreach (pv_page_numbers($page, $totalPages) as $number): ?>
-                <?php if ($number === 0): ?>
-                    <li class="page-gap" aria-hidden="true">…</li>
-                <?php elseif ($number === $page): ?>
-                    <li><span class="button page-number current" aria-current="page"><?= $number ?></span></li>
-                <?php else: ?>
-                    <li>
-                        <a class="button page-number" href="<?= h($pageUrl($number)) ?>"
-                           aria-label="<?= $number ?> ページ目へ"><?= $number ?></a>
-                    </li>
-                <?php endif; ?>
-            <?php endforeach; ?>
-        </ol>
-
-        <?php if ($page < $totalPages): ?>
-            <a class="button page-step" href="<?= h($pageUrl($page + 1)) ?>" rel="next">次へ &rsaquo;</a>
-            <a class="button page-step" href="<?= h($pageUrl($totalPages)) ?>" aria-label="最終ページへ">最終 &raquo;</a>
-        <?php else: ?>
-            <span class="button page-step" aria-disabled="true">次へ &rsaquo;</span>
-            <span class="button page-step" aria-disabled="true">最終 &raquo;</span>
-        <?php endif; ?>
-    </nav>
-<?php endif; ?>
-
 </div><!-- /.listing -->
-
-<?php // リスト表示で項目を押したときに出る詳細。押すまでは表示しない。 ?>
-<aside class="detail-panel" id="detailPanel" hidden aria-label="選んだ<?= h($rootLabel) ?>の詳細">
-    <div class="detail-head">
-        <h2 class="detail-title">詳細</h2>
-        <button type="button" class="detail-close" data-act="detail-close" aria-label="詳細を閉じる">×</button>
-    </div>
-
-    <div class="detail-thumb" data-detail-thumb></div>
-
-    <p class="detail-name" data-detail-name></p>
-
-    <dl class="detail-list">
-        <dt>種類</dt>
-        <dd data-detail-kind></dd>
-        <dt>サイズ</dt>
-        <dd data-detail-size></dd>
-        <dt>更新日時</dt>
-        <dd data-detail-date></dd>
-        <dt>場所</dt>
-        <dd data-detail-path></dd>
-    </dl>
-
-    <div class="detail-actions">
-        <button type="button" class="button primary" data-act="detail-open">拡大表示</button>
-        <button type="button" class="button" data-act="detail-download">ダウンロード</button>
-    </div>
-</aside>
 
 </main>
 
-<?php if ($canEdit): ?>
 <!-- 右クリック（スマホは長押し）で出る操作メニュー。
-     出す項目は対象に応じて app.js が切り替える。 -->
+     出す項目は対象に応じて app.js が切り替える。
+     「プロパティ」は見るだけの人にも要るので、$canEdit の外に置く。 -->
 <nav class="context-menu" id="contextMenu" hidden aria-label="操作メニュー">
     <p class="context-target" data-context-target></p>
-    <button type="button" class="context-item" data-menu="rename">名前を変更</button>
-    <button type="button" class="context-item" data-menu="move">移動</button>
-    <button type="button" class="context-item" data-menu="download">ダウンロード</button>
-    <button type="button" class="context-item danger" data-menu="delete">ゴミ箱へ移動</button>
-    <button type="button" class="context-item" data-menu="select">複数選択</button>
-    <button type="button" class="context-item" data-menu="mkdir">新しいフォルダ</button>
-    <button type="button" class="context-item" data-menu="info">フォルダの説明</button>
+    <button type="button" class="context-item" data-menu="properties">プロパティ</button>
+    <?php if ($canEdit): ?>
+        <button type="button" class="context-item" data-menu="rename">名前を変更</button>
+        <button type="button" class="context-item" data-menu="move">移動</button>
+        <button type="button" class="context-item" data-menu="download">ダウンロード</button>
+        <button type="button" class="context-item danger" data-menu="delete">ゴミ箱へ移動</button>
+        <button type="button" class="context-item" data-menu="select">複数選択</button>
+        <button type="button" class="context-item" data-menu="mkdir">新しいフォルダ</button>
+        <button type="button" class="context-item" data-menu="info">フォルダ情報</button>
+    <?php endif; ?>
 </nav>
+
+<?php // プロパティ。右クリックメニューから開き、画面全体に出す。
+      // どこを押しても閉じるので、閉じるボタンは置かない。 ?>
+<div class="props-view" id="propsView" hidden tabindex="-1" role="dialog" aria-label="プロパティ">
+    <div class="props-body">
+        <div class="props-thumb" data-props-thumb></div>
+
+        <?php // 画面を横にしたときに、写真の横へ回せるようひとまとめにしておく ?>
+        <div class="props-info">
+            <p class="props-name" data-props-name></p>
+
+            <dl class="props-list">
+                <dt>種類</dt>
+                <dd data-props-kind></dd>
+                <dt>サイズ</dt>
+                <dd data-props-size></dd>
+                <dt>更新日時</dt>
+                <dd data-props-date></dd>
+                <dt>場所</dt>
+                <dd data-props-path></dd>
+            </dl>
+        </div>
+    </div>
+</div>
+
+<?php if ($canEdit): ?>
 
 <!-- 名前の変更 -->
 <div class="modal" id="renameModal" hidden>
@@ -611,10 +607,10 @@ if ($parent !== null) {
 </div>
 
 <!-- 新しいフォルダ -->
-<?php // フォルダの説明（info.yml）の編集。右クリックまたは「⋯ メニュー」から開く。 ?>
+<?php // フォルダ情報（info.yml）の編集。右クリックまたは「⋯ メニュー」から開く。 ?>
 <div class="modal" id="infoModal" hidden>
     <form class="modal-panel wide" method="post" action="action.php">
-        <h2 class="modal-title">フォルダの説明</h2>
+        <h2 class="modal-title">フォルダ情報</h2>
 
         <input type="hidden" name="token" value="<?= h($token) ?>">
         <input type="hidden" name="action" value="info">
@@ -635,6 +631,13 @@ if ($parent !== null) {
             $infoThumbName = $info['thumb']['random']
                 ? PV_INFO_RANDOM
                 : basename($info['thumb']['path']);
+        }
+
+        // ランダムに選ぶ範囲。'self' はこのフォルダ以下、'root:<パス>' はそのフォルダ以下。
+        // フォルダ名を変えても壊れないよう、このフォルダ以下は 'self' のままにしておく。
+        $infoRandomFrom = 'self';
+        if ($infoThumbName === PV_INFO_RANDOM && $info['thumb']['randomFrom'] !== null) {
+            $infoRandomFrom = 'root:' . $info['thumb']['randomFrom'];
         }
         ?>
 
@@ -673,6 +676,23 @@ if ($parent !== null) {
             <?php elseif ($infoImagesCut): ?>
                 <p class="modal-note">画像が多いため、名前順の先頭 200 枚だけを並べています。</p>
             <?php endif; ?>
+
+            <?php // 「ランダム」を選んだときだけ出す。切り替えは app.js が行う。 ?>
+            <label class="modal-field random-from" data-random-from
+                   <?= $infoThumbName === PV_INFO_RANDOM ? '' : 'hidden' ?>>
+                <span class="modal-label">ランダムに選ぶ範囲</span>
+                <select name="random_from">
+                    <option value="self"<?= $infoRandomFrom === 'self' ? ' selected' : '' ?>>
+                        このフォルダ以下
+                    </option>
+                    <?php foreach ($folderTree as $folder): ?>
+                        <?php $value = 'root:' . $folder['path']; ?>
+                        <option value="<?= h($value) ?>"<?= $infoRandomFrom === $value ? ' selected' : '' ?>>
+                            <?= str_repeat('　', (int) $folder['depth']) . h($folder['name']) ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+            </label>
         </fieldset>
 
         <div class="modal-field">
@@ -714,7 +734,7 @@ if ($parent !== null) {
 
         <p class="modal-note">
             保存すると <code>info.yml</code> を書き換えます。手で書き足したコメントは残りません。
-            タイトル・サムネイル・項目をすべて空にして保存すると、説明はゴミ箱へ移動します。
+            タイトル・サムネイル・項目をすべて空にして保存すると、フォルダ情報はゴミ箱へ移動します。
         </p>
 
         <div class="modal-actions">

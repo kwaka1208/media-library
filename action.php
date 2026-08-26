@@ -94,7 +94,8 @@ switch ((string) ($_POST['action'] ?? '')) {
             (string) ($_POST['dir'] ?? ''),
             (string) ($_POST['title'] ?? ''),
             (string) ($_POST['thumbnail'] ?? ''),
-            is_array($items) ? $items : []
+            is_array($items) ? $items : [],
+            (string) ($_POST['random_from'] ?? 'self')
         );
         break;
 

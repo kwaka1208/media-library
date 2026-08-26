@@ -193,7 +193,7 @@ a { color: var(--accent); }
 /* ---- 本文 ---- */
 
 /* 一覧の下の余白でも右クリックメニューを出せるよう、高さを確保しておく。
-   リスト表示で詳細を出したときは、一覧の右に並べる。 */
+   フォルダの説明があるときは、一覧の右に並べる。 */
 .content {
     display: flex;
     gap: 18px;
@@ -208,19 +208,46 @@ a { color: var(--accent); }
     min-width: 0;
 }
 
+/* 枚数とページ送りの帯。貼り付いたヘッダーのすぐ下に置いて、
+   一覧をどこまでスクロールしても、同じ場所でページを切り替えられるようにする。
+   --header-h には app.js が実際のヘッダーの高さを入れる。 */
+.listing-bar {
+    position: sticky;
+    top: var(--header-h, 72px);
+    z-index: 9;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 16px;
+    align-items: center;
+    justify-content: space-between;
+
+    /* 一覧が裏を通り抜けるので、背景を敷いて隠す */
+    padding: 10px 0 12px;
+    margin-bottom: 2px;
+    background: var(--bg);
+}
+
+/* 説明の下に置くときは、列ごと貼り付いているので、こちらは貼り付けない。
+   説明と同じ幅の枠に入れて、ひとつづきに見せる。 */
+.side .listing-bar {
+    position: static;
+    flex: 0 0 auto;
+    gap: 8px 12px;
+    padding: 12px 14px;
+    margin-bottom: 0;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    box-shadow: var(--shadow);
+}
+
 .summary {
-    margin: 4px 0 14px;
+    margin: 0;
     font-size: 13px;
     color: var(--text-muted);
 }
 
 .page-indicator { margin-left: 8px; }
-
-.hint {
-    margin: 0 0 14px;
-    font-size: 12px;
-    color: var(--text-muted);
-}
 
 .notice {
     padding: 14px 16px;
@@ -422,8 +449,7 @@ a { color: var(--accent); }
     flex-wrap: wrap;
     gap: 8px;
     align-items: center;
-    justify-content: center;
-    margin-top: 28px;
+    justify-content: flex-end;
     font-size: 13px;
     color: var(--text-muted);
 }
@@ -1193,11 +1219,6 @@ body[data-view="list"] .card {
 
 body[data-view="list"] .card:hover { border-color: var(--accent); }
 
-/* いま詳細を出している行。左の線で、どれを見ているか分かるようにする。 */
-body[data-view="list"] .card.current {
-    border-color: var(--accent);
-    box-shadow: inset 3px 0 0 var(--accent), var(--shadow);
-}
 
 body[data-view="list"] .thumb {
     flex-shrink: 0;
@@ -1267,13 +1288,24 @@ body[data-view="list"] .card:has(.thumb:focus-visible) {
 
 /* ---- フォルダの説明（info.yml） ---- */
 
-/* 広い画面では一覧の左に置き、詳細パネルと同じようにヘッダーの下へ貼り付ける。
+/* 説明と、その下の枚数・ページ送りをまとめた列。
+   広い画面では一覧の左に置き、貼り付いたヘッダーの下に収まるようにする。
    --header-h には app.js が実際のヘッダーの高さを入れる。 */
-.info-panel {
+.side {
     position: sticky;
     top: calc(var(--header-h, 72px) + 14px);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
     flex: 0 0 500px;
     max-height: calc(100vh - var(--header-h, 72px) - 28px);
+}
+
+/* 説明が長いときは、こちらだけを送って、下の枚数・ページ送りは出したままにする。
+   min-height: 0 がないと、flex の中では縮まずにあふれてしまう。 */
+.info-panel {
+    flex: 0 1 auto;
+    min-height: 0;
     padding: 14px;
     overflow-y: auto;
     background: var(--panel);
@@ -1282,7 +1314,13 @@ body[data-view="list"] .card:has(.thumb:focus-visible) {
     box-shadow: var(--shadow);
 }
 
+/* 写真の形はそれぞれ違うので、切り取らずに、その形のまま収める。
+   縦長の写真でサムネイルだけが伸びないよう、高さの上限は画面を基準にする。
+   dvh は、アドレスバーの出入りで高さが変わる端末向け。 */
 .info-thumb {
+    display: flex;
+    align-items: center;
+    justify-content: center;
     margin-bottom: 12px;
     overflow: hidden;
     background: var(--bg);
@@ -1291,8 +1329,10 @@ body[data-view="list"] .card:has(.thumb:focus-visible) {
 
 .info-thumb img {
     display: block;
-    width: 100%;
-    height: auto;
+    max-width: 100%;
+    max-height: 40vh;
+    max-height: 40dvh;
+    object-fit: contain;
 }
 
 .info-title {
@@ -1320,112 +1360,91 @@ body[data-view="list"] .card:has(.thumb:focus-visible) {
     overflow-wrap: anywhere;
 }
 
-/* ---- 詳細パネル ---- */
+/* ---- プロパティ（画面全体） ---- */
 
-/* 貼り付いたヘッダーの下に収まるよう、--header-h（app.js が実際の高さを入れる）を使う */
-.detail-panel {
-    position: sticky;
-    top: calc(var(--header-h, 72px) + 14px);
-    flex: 0 0 300px;
-    max-height: calc(100vh - var(--header-h, 72px) - 28px);
-    padding: 14px;
-    overflow-y: auto;
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    box-shadow: var(--shadow);
-}
-
-.detail-panel[hidden] { display: none; }
-
-/* グリッド表示に戻したときは、開いたままでも引っ込める */
-body[data-view="grid"] .detail-panel { display: none; }
-
-.detail-head {
+/* 右クリックメニューの「プロパティ」で出す。押した場所へ戻れるよう、
+   画面全体を覆って一覧を隠す。どこを押しても閉じるので、閉じるボタンは無い。 */
+.props-view {
+    position: fixed;
+    inset: 0;
+    z-index: 200;
     display: flex;
-    gap: 10px;
-    align-items: center;
-    margin-bottom: 10px;
-}
-
-.detail-title {
-    flex: 1;
-    margin: 0;
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--text-muted);
-}
-
-.detail-close {
-    flex-shrink: 0;
-    width: 28px;
-    height: 28px;
-    padding: 0;
-    font-size: 18px;
-    line-height: 1;
-    color: var(--text-muted);
+    padding: 24px;
+    overflow-y: auto;
     cursor: pointer;
-    background: none;
-    border: 0;
-    border-radius: 6px;
+    background: rgba(0, 0, 0, .55);
+    -webkit-backdrop-filter: blur(2px);
+    backdrop-filter: blur(2px);
 }
 
-.detail-close:hover {
-    color: var(--text);
-    background: var(--bg);
+.props-view[hidden] { display: none; }
+
+.props-view:focus { outline: 0; }
+
+/* 真ん中に置くのに align-items: center ではなく margin: auto を使う。
+   center だと、中身が画面より高いときに上の端が画面の外へ出てしまい、
+   スクロールしても戻せなくなる（横向きの画面で起きる）。 */
+.props-body {
+    width: 100%;
+    max-width: 520px;
+    margin: auto;
+    padding: 24px;
+    text-align: center;
+    background: var(--panel);
+    border-radius: 14px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, .35);
 }
 
-.detail-thumb {
+/* 写真の形はそれぞれ違うので、枠の形は決めずに、写真そのものの形で見せる。
+   形を決め打ちすると、縦長の写真が横長の枠に押し込まれて小さくなってしまう。 */
+.props-thumb {
     display: flex;
     align-items: center;
     justify-content: center;
-    aspect-ratio: 4 / 3;
-    margin-bottom: 12px;
-    overflow: hidden;
-    cursor: zoom-in;
-    background: var(--bg);
-    border-radius: 8px;
+    margin-bottom: 16px;
 }
 
-.detail-thumb img,
-.detail-thumb video {
+/* 高さの上限は画面を基準にする。dvh は、スクロールに合わせてアドレスバーが
+   出入りする端末で高さが変わらないようにするためのもの。
+   対応していないブラウザは、ひとつ上の vh の指定がそのまま使われる。 */
+.props-thumb img,
+.props-thumb video {
     display: block;
     max-width: 100%;
-    max-height: 100%;
+    max-height: 52vh;
+    max-height: 52dvh;
     object-fit: contain;
+    background: var(--bg);
+    border-radius: 10px;
 }
 
 /* 長いファイル名は折り返す（省略すると、何のファイルか分からなくなる） */
-.detail-name {
-    margin: 0 0 10px;
-    font-size: 14px;
+.props-name {
+    margin: 0 0 16px;
+    font-size: 16px;
     font-weight: 600;
     word-break: break-all;
 }
 
-.detail-list {
+.props-list {
     display: grid;
     grid-template-columns: auto 1fr;
-    gap: 4px 12px;
-    margin: 0 0 14px;
-    font-size: 13px;
+    gap: 6px 16px;
+    margin: 0;
+    font-size: 14px;
+    text-align: left;
 }
 
-.detail-list dt {
+.props-list dt {
     color: var(--text-muted);
     white-space: nowrap;
 }
 
-.detail-list dd {
+.props-list dd {
     margin: 0;
     word-break: break-all;
 }
 
-.detail-actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-}
 
 /* ---- 画面が狭いとき ---- */
 
@@ -1460,6 +1479,12 @@ body[data-view="grid"] .detail-panel { display: none; }
     .field.search input { width: 100%; }
     .crumb { max-width: 12ch; }
     .grid { gap: 10px; }
+
+    /* 狭い画面ではページ番号の並びを畳む。
+       番号を並べると何行にも折り返して、貼り付いた帯が画面の何割も占めてしまう。
+       いま何ページ目かは「5 / 9 ページ」で分かるので、
+       先頭・前へ・次へ・最終だけを残す。 */
+    .page-numbers { display: none; }
 
     .lb-image,
     .lb-video {
@@ -1506,37 +1531,73 @@ body[data-view="grid"] .detail-panel { display: none; }
         align-items: stretch;
     }
 
-    .info-panel {
+    /* 縦に積むので、列ごと貼り付けるのはやめて、高さの上限も外す */
+    .side {
         position: static;
         flex: none;
         max-height: none;
     }
 
-    /* 説明で画面が埋まらないよう、サムネイルの高さを抑える */
-    .info-thumb img {
-        max-height: 26vh;
-        object-fit: cover;
-    }
-
-    .detail-panel {
-        position: fixed;
-        top: auto;
-        right: 0;
-        bottom: 0;
-        left: 0;
-        z-index: 20;
+    .info-panel {
         flex: none;
-        max-height: 58vh;
-        border-width: 1px 0 0;
-        border-radius: 12px 12px 0 0;
+        overflow-y: visible;
     }
 
-    /* 一覧の見える範囲が狭くなりすぎないよう、サムネイルの高さを抑える */
-    .detail-thumb {
-        aspect-ratio: 16 / 9;
-        max-height: 20vh;
+    /* 縦に積むぶん、情報で画面が埋まらないようサムネイルの高さを抑える */
+    .info-thumb img {
+        max-height: 32vh;
+        max-height: 32dvh;
     }
 
-    /* 一覧の最後の行が、下から出た詳細に隠れないようにする */
-    body[data-view="list"].detail-open .content { padding-bottom: 62vh; }
+    .props-view { padding: 16px; }
+    .props-body { padding: 18px; }
+}
+
+/* 画面を横にしたときのような、高さの足りない画面。
+   写真と余白を詰めて、スクロールせずに一通り読めるようにする。
+   それでも入りきらないときは、margin: auto のおかげで上下どちらへもスクロールできる。 */
+@media (max-height: 520px) {
+    .props-view { padding: 12px; }
+    .props-body { padding: 16px; }
+
+    .props-thumb {
+        margin-bottom: 12px;
+    }
+
+    .props-thumb img,
+    .props-thumb video {
+        max-height: 40vh;
+        max-height: 40dvh;
+    }
+
+    .props-name { margin-bottom: 12px; }
+}
+
+/* 横にした画面は、縦には狭いが横には余っている。
+   写真を情報の横へ回して、写真を大きく見せる。 */
+@media (max-height: 520px) and (orientation: landscape) {
+    .props-body {
+        display: flex;
+        gap: 20px;
+        align-items: center;
+        max-width: 760px;
+        text-align: left;
+    }
+
+    .props-thumb {
+        flex: 0 1 auto;
+        margin-bottom: 0;
+    }
+
+    .props-thumb img,
+    .props-thumb video {
+        max-height: 74vh;
+        max-height: 74dvh;
+    }
+
+    /* min-width: 0 がないと、長いファイル名で情報側が縮まなくなる */
+    .props-info {
+        flex: 1 1 auto;
+        min-width: 0;
+    }
 }

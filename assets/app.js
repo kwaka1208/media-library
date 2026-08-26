@@ -113,6 +113,7 @@
     // カード（またはフォルダの行）に付けた data 属性から、操作対象を組み立てる
     function itemOf(element) {
         return {
+            element: element,
             path: element.dataset.path || '',
             name: element.dataset.name || '',
             src: element.dataset.src || '',
@@ -177,7 +178,22 @@
             return !option.disabled;
         });
 
-        select.value = selectable.length > 0 ? selectable[0].value : '';
+        // 開いたときに、いまいる場所のあたりが見えるようにする。
+        // 一覧が長いと、先頭のホームから探し下ろすことになってしまうため。
+        // いまいるフォルダ自身は移動先にならないので、その親を選んでおく。
+        var slash = currentDir.lastIndexOf('/');
+        var parentDir = slash === -1 ? '' : currentDir.slice(0, slash);
+
+        var nearby = selectable.filter(function (option) {
+            return option.value === parentDir;
+        });
+
+        if (nearby.length > 0) {
+            select.value = nearby[0].value;
+        } else {
+            select.value = selectable.length > 0 ? selectable[0].value : '';
+        }
+
         form.querySelector('button[type="submit"]').disabled = selectable.length === 0;
     }
 
@@ -246,7 +262,7 @@
         input.focus();
     }
 
-    // ---- フォルダの説明（info.yml）の編集 --------------------------
+    // ---- フォルダ情報（info.yml）の編集 ------------------------------
 
     var infoModal = document.getElementById('infoModal');
     var infoRows  = infoModal ? infoModal.querySelector('[data-info-rows]') : null;
@@ -286,6 +302,28 @@
         row.querySelector('input').focus();
     }
 
+    // 「ランダム」を選んだときだけ、選ぶ範囲を出す。
+    // ほかを選んでいるあいだ出しておくと、効かない設定に見えてしまうため。
+    var randomFrom = infoModal ? infoModal.querySelector('[data-random-from]') : null;
+
+    function updateRandomFrom() {
+        if (!randomFrom) {
+            return;
+        }
+
+        var chosen = infoModal.querySelector('input[name="thumbnail"]:checked');
+
+        randomFrom.hidden = !chosen || chosen.value !== 'random';
+    }
+
+    if (infoModal) {
+        infoModal.addEventListener('change', function (event) {
+            if (event.target.name === 'thumbnail') {
+                updateRandomFrom();
+            }
+        });
+    }
+
     function removeInfoRow(row) {
         if (row) {
             row.remove();
@@ -314,6 +352,15 @@
         row.querySelector('input').focus();
     }
 
+    // プロパティ（画面全体）。組み立てはこのファイルの終わりのほうで行う。
+    // #propsView が無いページでは、showProperties は何もしないまま。
+    var propsView = document.getElementById('propsView');
+    var showProperties = function () {};
+
+    function propsOpen() {
+        return propsView !== null && !propsView.hidden;
+    }
+
     function showInfo(opener) {
         if (!infoModal) {
             return;
@@ -324,6 +371,9 @@
 
         var form = infoModal.querySelector('form');
         form.reset();
+
+        // reset で選び直されたラジオに合わせる
+        updateRandomFrom();
 
         openModal(infoModal, opener);
         form.elements.title.focus();
@@ -516,7 +566,7 @@
 
         if (target.closest('.card, .folder-item, a, button, input, select, ' +
                 'textarea, label, .selection-bar, .page-header, .pagination, ' +
-                '.detail-panel, .modal, .context-menu, .lightbox')) {
+                '.modal, .context-menu, .lightbox, .props-view')) {
             return false;
         }
 
@@ -615,7 +665,7 @@
                 return;
             }
 
-            if (openedModal || (lightbox && !lightbox.hidden)) {
+            if (openedModal || propsOpen() || (lightbox && !lightbox.hidden)) {
                 return;
             }
 
@@ -813,8 +863,17 @@
     // もう一度押して閉じる判定と、閉じたあとのフォーカス戻しに使う。
     var contextOpener = null;
 
+    // 権限によっては置いていない項目があるので、無ければ null が返る
     function menuItem(name) {
         return contextMenu.querySelector('[data-menu="' + name + '"]');
+    }
+
+    function showMenuItem(name, on) {
+        var item = menuItem(name);
+
+        if (item) {
+            item.hidden = !on;
+        }
     }
 
     // 右クリックした先の対象を決める。
@@ -844,19 +903,46 @@
         var single = items.length === 1;
         var label = contextMenu.querySelector('[data-context-target]');
 
-        // 意味のある項目だけを出す
-        menuItem('rename').hidden = !single;
-        menuItem('download').hidden = !(single && !items[0].isFolder);
-        menuItem('move').hidden = !onItem;
-        menuItem('delete').hidden = !onItem;
-        menuItem('mkdir').hidden = onItem;
-        menuItem('info').hidden = onItem;
-        menuItem('select').hidden = onItem;
-        menuItem('select').textContent =
-            document.body.classList.contains('selecting') ? '選択をやめる' : '複数選択';
+        // 意味のある項目だけを出す。
+        // プロパティは、写真・動画を1件だけ選んだときに出す
+        // （フォルダは大きさや更新日時を持っていないので出さない）。
+        showMenuItem('properties', single && !items[0].isFolder);
+        showMenuItem('rename', single);
+        showMenuItem('download', single && !items[0].isFolder);
+        showMenuItem('move', onItem);
+        showMenuItem('delete', onItem);
+        showMenuItem('mkdir', !onItem);
+        showMenuItem('info', !onItem);
+        showMenuItem('select', !onItem);
+
+        var selectItem = menuItem('select');
+
+        if (selectItem) {
+            selectItem.textContent =
+                document.body.classList.contains('selecting') ? '選択をやめる' : '複数選択';
+        }
 
         label.hidden = !onItem;
         label.textContent = onItem ? describe(items) : '';
+
+        // 出せる項目がひとつも無いなら（見るだけの人が余白を右クリックしたときなど）、
+        // 空の枠だけが出てしまうので開かない
+        var usable = Array.prototype.some.call(
+            contextMenu.querySelectorAll('[data-menu]'),
+            function (element) {
+                return !element.hidden;
+            });
+
+        if (!usable) {
+            contextItems = [];
+
+            if (contextOpener) {
+                contextOpener.setAttribute('aria-expanded', 'false');
+                contextOpener = null;
+            }
+
+            return false;
+        }
 
         // いったん表示して大きさを測り、画面からはみ出さない位置に置く
         contextMenu.hidden = false;
@@ -871,6 +957,8 @@
 
         contextMenu.style.left = Math.max(8, Math.min(left, window.innerWidth - box.width - 8)) + 'px';
         contextMenu.style.top = Math.max(8, Math.min(y, window.innerHeight - box.height - 8)) + 'px';
+
+        return true;
     }
 
     function closeContextMenu() {
@@ -913,6 +1001,9 @@
             case 'select':
                 setSelecting(!document.body.classList.contains('selecting'));
                 break;
+            case 'properties':
+                showProperties(items[0]);
+                break;
         }
     }
 
@@ -927,8 +1018,10 @@
 
             var container = target.closest('.card, .folder-item');
 
-            event.preventDefault();
-            openContextMenu(event.clientX, event.clientY, container ? targetsFor(container) : []);
+            if (openContextMenu(event.clientX, event.clientY,
+                    container ? targetsFor(container) : [])) {
+                event.preventDefault();
+            }
         });
 
         // スマホ・タブレット向けの長押し。
@@ -954,8 +1047,8 @@
                 pressTimer = null;
 
                 // 長押しのあとに続くタップで拡大表示が開いてしまうのを防ぐ
-                suppressClick = true;
-                openContextMenu(touch.clientX, touch.clientY, container ? targetsFor(container) : []);
+                suppressClick = openContextMenu(touch.clientX, touch.clientY,
+                    container ? targetsFor(container) : []);
             }, 500);
         }, { passive: true });
 
@@ -1254,8 +1347,8 @@
             return;
         }
 
-        // 操作用のモーダルを開いている間は移動しない
-        if (openedModal) {
+        // 操作用のモーダルやプロパティを開いている間は移動しない
+        if (openedModal || propsOpen()) {
             return;
         }
 
@@ -1282,10 +1375,24 @@
     });
 
     // ---- 貼り付いたヘッダーの高さ ----------------------------------
-    // 詳細パネルをヘッダーのすぐ下に貼り付けるために、実際の高さを CSS へ渡す。
-    // パンくずが折り返すなどで高さが変わるので、幅が変わったら測り直す。
+    // 枚数とページ送りの帯を、ヘッダーのすぐ下に貼り付けるために、
+    // 実際の高さを CSS へ渡す。パンくずが折り返すなどで高さが変わるので、
+    // 幅が変わったら測り直す。
 
     var pageHeader = document.querySelector('.page-header');
+    var listingBar = document.querySelector('.listing-bar');
+
+    // 画面の上に貼り付いているものの、いちばん下の位置。
+    // ここより上に来たものは隠れてしまうので、スクロールの目安に使う。
+    function stuckBottom() {
+        var bottom = pageHeader ? pageHeader.getBoundingClientRect().bottom : 0;
+
+        if (listingBar) {
+            bottom = Math.max(bottom, listingBar.getBoundingClientRect().bottom);
+        }
+
+        return bottom;
+    }
 
     function updateHeaderHeight() {
         if (!pageHeader) {
@@ -1314,16 +1421,16 @@
             document.querySelectorAll('.folder-item .folder, .card .thumb'));
     }
 
-    // フォーカスを移したものが、貼り付いたヘッダーや画面の外に隠れないようにする
+    // フォーカスを移したものが、貼り付いた帯や画面の外に隠れないようにする
     function focusItem(element) {
         element.focus({ preventScroll: true });
 
         var box = element.getBoundingClientRect();
-        var headerBottom = pageHeader ? pageHeader.offsetHeight : 0;
+        var top = stuckBottom();
         var margin = 8;
 
-        if (box.top < headerBottom + margin) {
-            window.scrollBy(0, box.top - headerBottom - margin);
+        if (box.top < top + margin) {
+            window.scrollBy(0, box.top - top - margin);
         } else if (box.bottom > window.innerHeight - margin) {
             window.scrollBy(0, box.bottom - window.innerHeight + margin);
         }
@@ -1393,8 +1500,9 @@
             return;
         }
 
-        // 拡大表示・操作モーダル・操作メニューを開いているあいだは、そちらに任せる
-        if (openedModal || (lightbox && !lightbox.hidden) ||
+        // 拡大表示・操作モーダル・操作メニュー・プロパティを開いているあいだは、
+        // そちらに任せる
+        if (openedModal || propsOpen() || (lightbox && !lightbox.hidden) ||
             (contextMenu && !contextMenu.hidden)) {
             return;
         }
@@ -1533,6 +1641,100 @@
         focusItem(items[next]);
     });
 
+    // ---- プロパティ --------------------------------------------------
+    //
+    // 右クリック（スマホは長押し）の操作メニューから開き、画面全体に出す。
+    // 画面のどこかを押すか Esc で、元の画面へ戻る。
+
+    if (propsView) {
+        var propsThumb = propsView.querySelector('[data-props-thumb]');
+        var propsName  = propsView.querySelector('[data-props-name]');
+        var propsKind  = propsView.querySelector('[data-props-kind]');
+        var propsSize  = propsView.querySelector('[data-props-size]');
+        var propsDate  = propsView.querySelector('[data-props-date]');
+        var propsPath  = propsView.querySelector('[data-props-path]');
+
+        // 一覧のサムネイルと同じ見せ方。動画は先頭付近の1コマを出す。
+        function fillPropsThumb(card) {
+            var node;
+
+            propsThumb.textContent = '';
+
+            if (card.dataset.kind === 'video') {
+                node = document.createElement('video');
+                node.preload = 'metadata';
+                node.muted = true;
+                node.playsInline = true;
+                node.tabIndex = -1;
+                node.src = card.dataset.src + '#t=0.1';
+
+                propsThumb.appendChild(node);
+
+                // 後から作った要素は、読み込みを促さないと1コマも出ないことがある
+                node.load();
+
+                return;
+            }
+
+            node = document.createElement('img');
+            node.src = card.dataset.src;
+            node.alt = card.dataset.name || '';
+            node.decoding = 'async';
+
+            propsThumb.appendChild(node);
+        }
+
+        function closeProps() {
+            if (propsView.hidden) {
+                return;
+            }
+
+            propsView.hidden = true;
+            document.body.style.overflow = '';
+
+            // 見えないところで動画の読み込みが続かないよう、中身を消す
+            propsThumb.textContent = '';
+        }
+
+        // 一覧のカードに付いている data 属性を、そのまま見せる
+        showProperties = function (item) {
+            var card = item ? item.element : null;
+
+            if (!card) {
+                return;
+            }
+
+            var path = card.dataset.path || '';
+            var slash = path.lastIndexOf('/');
+
+            fillPropsThumb(card);
+
+            propsName.textContent = card.dataset.name || '';
+            propsKind.textContent = card.dataset.kind === 'video' ? '動画' : '写真';
+            propsSize.textContent = card.dataset.size || '';
+            propsDate.textContent = card.dataset.date || '';
+            propsPath.textContent = slash === -1 ? 'ホーム' : path.slice(0, slash);
+
+            propsView.hidden = false;
+            document.body.style.overflow = 'hidden';
+
+            // Esc で閉じられるよう、キーの行き先をこちらへ移す
+            propsView.focus({ preventScroll: true });
+        };
+
+        // どこを押しても閉じる。
+        // touchend では閉じない（中身が長いときの指でのスクロールと区別できないため）。
+        propsView.addEventListener('click', closeProps);
+
+        // 他の Esc の処理より先に判断したいので、捕まえる側（capture）で受け取る
+        document.addEventListener('keydown', function (event) {
+            if (event.key === 'Escape' && !propsView.hidden) {
+                event.stopPropagation();
+                closeProps();
+            }
+        }, true);
+    }
+
     // ---- ライトボックス --------------------------------------------
 
     var thumbs = Array.prototype.slice.call(document.querySelectorAll('.thumb'));
@@ -1660,11 +1862,6 @@
             event.preventDefault();
 
             // 選択モード中のクリックは、選択の処理が先に受け取って止めている
-
-            // リスト表示のときは、行を押したものとして詳細パネル側で受け取る
-            if (document.body.dataset.view === 'list') {
-                return;
-            }
 
             open(index);
         });
@@ -1821,231 +2018,35 @@
         }
     }, { passive: true });
 
-    // ---- リスト表示の詳細パネル ------------------------------------
+    // ---- リスト表示で行を押したとき ----------------------------------
     //
-    // リストの行を押すと、右（画面が狭いときは下）に詳細を出す。
-    // 押しただけでは拡大しないので、続けて他の行を押して見比べられる。
-    // 拡大・再生は、パネルのボタン／サムネイル／行のダブルクリックから。
+    // リストでは行のどこを押しても拡大・再生できるようにする。
+    // サムネイル（.thumb）自身は自前の処理を持っているので、そちらに任せる。
 
-    var detailPanel = document.getElementById('detailPanel');
     var grid = document.getElementById('grid');
 
-    if (detailPanel && grid) {
-        var detailThumb = detailPanel.querySelector('[data-detail-thumb]');
-        var detailName  = detailPanel.querySelector('[data-detail-name]');
-        var detailKind  = detailPanel.querySelector('[data-detail-kind]');
-        var detailSize  = detailPanel.querySelector('[data-detail-size]');
-        var detailDate  = detailPanel.querySelector('[data-detail-date]');
-        var detailPath  = detailPanel.querySelector('[data-detail-path]');
-        var detailOpen  = detailPanel.querySelector('[data-act="detail-open"]');
-
-        // いま詳細を出している行
-        var detailCard = null;
-
-        function isListView() {
-            return document.body.dataset.view === 'list';
-        }
-
-        // 行から、ライトボックスの何番目にあたるかを求める
-        function indexOfCard(card) {
-            var thumb = card ? card.querySelector('.thumb') : null;
-
-            return thumb ? thumbs.indexOf(thumb) : -1;
-        }
-
-        function markCurrent(card) {
-            if (detailCard) {
-                detailCard.classList.remove('current');
-            }
-
-            detailCard = card;
-
-            if (detailCard) {
-                detailCard.classList.add('current');
-            }
-        }
-
-        // パネルのサムネイル。動画は一覧と同じく、先頭付近の1コマを見せる。
-        function fillThumb(card) {
-            var node;
-
-            detailThumb.textContent = '';
-
-            if (card.dataset.kind === 'video') {
-                node = document.createElement('video');
-                node.preload = 'metadata';
-                node.muted = true;
-                node.playsInline = true;
-                node.tabIndex = -1;
-
-                // 一覧のサムネイルと同じく、先頭付近の1コマを見せる
-                node.src = card.dataset.src + '#t=0.1';
-
-                detailThumb.appendChild(node);
-
-                // 後から作った要素は、読み込みを促さないと1コマも出ないことがある
-                node.load();
-
-                return;
-            }
-
-            node = document.createElement('img');
-            node.src = card.dataset.src;
-            node.alt = card.dataset.name || '';
-            node.decoding = 'async';
-
-            detailThumb.appendChild(node);
-        }
-
-        function showDetail(card) {
-            var isVideo = card.dataset.kind === 'video';
-            var path = card.dataset.path || '';
-            var slash = path.lastIndexOf('/');
-
-            fillThumb(card);
-
-            detailName.textContent = card.dataset.name || '';
-            detailKind.textContent = isVideo ? '動画' : '写真';
-            detailSize.textContent = card.dataset.size || '';
-            detailDate.textContent = card.dataset.date || '';
-            detailPath.textContent = slash === -1 ? 'ホーム' : path.slice(0, slash);
-            detailOpen.textContent = isVideo ? '再生する' : '拡大表示';
-
-            markCurrent(card);
-
-            detailPanel.hidden = false;
-            document.body.classList.add('detail-open');
-
-            // 画面が狭いときは、詳細が画面の下から出てきて、押した行を隠すことがある。
-            // 隠れているときだけ、その行が見える位置まで動かす。
-            if (window.matchMedia('(max-width: 760px)').matches) {
-                revealCard(card);
-            }
-        }
-
-        // 押した行が、下から出た詳細や貼り付いたヘッダーに隠れないようにする
-        function revealCard(card) {
-            var box = card.getBoundingClientRect();
-            var panelTop = window.innerHeight - detailPanel.offsetHeight;
-            var headerBottom = pageHeader ? pageHeader.offsetHeight : 0;
-            var margin = 8;
-
-            // なめらかな動き（behavior: 'smooth'）は、動きを減らす設定の環境では
-            // 何も起きないことがあるので、そのまま動かす。
-            if (box.bottom > panelTop - margin) {
-                window.scrollBy(0, box.bottom - panelTop + margin);
-            } else if (box.top < headerBottom + margin) {
-                window.scrollBy(0, box.top - headerBottom - margin);
-            }
-        }
-
-        function closeDetail() {
-            detailPanel.hidden = true;
-            document.body.classList.remove('detail-open');
-
-            // 中身を消して、見えないところで動画の読み込みが続かないようにする
-            detailThumb.textContent = '';
-
-            markCurrent(null);
-        }
-
-        function openCurrent() {
-            var index = indexOfCard(detailCard);
-
-            if (index >= 0) {
-                open(index);
-            }
-        }
-
-        // 行を押したら詳細を出す。選択モード中と、チェックボックスの上は除く。
+    if (grid) {
         grid.addEventListener('click', function (event) {
             var target = event.target;
 
-            if (!isListView() || document.body.classList.contains('selecting')) {
+            if (document.body.dataset.view !== 'list' ||
+                document.body.classList.contains('selecting')) {
                 return;
             }
 
-            if (!target || !target.closest || target.closest('.select-box')) {
-                return;
-            }
-
-            var card = target.closest('.card');
-
-            if (card) {
-                event.preventDefault();
-                showDetail(card);
-            }
-        });
-
-        // 二度押しで、そのまま拡大・再生する
-        grid.addEventListener('dblclick', function (event) {
-            var target = event.target;
-
-            if (!isListView() || document.body.classList.contains('selecting')) {
-                return;
-            }
-
-            if (!target || !target.closest || target.closest('.select-box')) {
+            if (!target || !target.closest ||
+                target.closest('.select-box') || target.closest('.thumb')) {
                 return;
             }
 
             var card = target.closest('.card');
+            var thumb = card ? card.querySelector('.thumb') : null;
+            var index = thumb ? thumbs.indexOf(thumb) : -1;
 
-            if (card) {
+            if (index >= 0) {
                 event.preventDefault();
-                markCurrent(card);
-                openCurrent();
+                open(index);
             }
         });
-
-        detailPanel.addEventListener('click', function (event) {
-            var trigger = event.target.closest('[data-act]');
-
-            if (!trigger) {
-                return;
-            }
-
-            switch (trigger.dataset.act) {
-                case 'detail-close':
-                    closeDetail();
-                    break;
-                case 'detail-open':
-                    openCurrent();
-                    break;
-                case 'detail-download':
-                    if (detailCard) {
-                        download(detailCard.dataset.src, detailCard.dataset.name);
-                    }
-                    break;
-            }
-        });
-
-        // パネルのサムネイルからも開けるようにする
-        detailThumb.addEventListener('click', openCurrent);
-
-        // Esc で閉じる。ただし、先に閉じるものがあるときは譲る。
-        //
-        // 他の Esc の処理より先に判断したいので、捕まえる側（capture）で受け取る。
-        // 後回しにすると、拡大表示を閉じた直後の「もう何も開いていない」状態を見て、
-        // 詳細まで一緒に閉じてしまう。
-        document.addEventListener('keydown', function (event) {
-            if (event.key !== 'Escape' || detailPanel.hidden) {
-                return;
-            }
-
-            if (openedModal || !lightbox.hidden) {
-                return;
-            }
-
-            if (contextMenu && !contextMenu.hidden) {
-                return;
-            }
-
-            if (document.body.classList.contains('selecting')) {
-                return;
-            }
-
-            closeDetail();
-        }, true);
     }
 }());

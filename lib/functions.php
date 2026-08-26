@@ -5,7 +5,7 @@
 
 require_once __DIR__ . '/yaml.php';
 
-// フォルダに置くと、その中身の説明として表示されるファイルの名前
+// フォルダに置くと、そのフォルダの情報として表示されるファイルの名前
 const PV_INFO_FILE = 'info.yml';
 
 // info.yml の thumbnail にこう書くと、そのフォルダ以下から1枚を選んで出す
@@ -268,7 +268,8 @@ function pv_count_images(string $dir, array $extensions): int
  * 返り値
  *   title … 見出しにする名前（無いこともある）
  *   thumb … ['path' => ルートからの相対パス, 'url' => 表示に使うURL,
- *            'random' => 毎回選び直したものか] か null
+ *            'random' => 毎回選び直したものか,
+ *            'randomFrom' => 選ぶ範囲（null なら info.yml のあるフォルダ以下）] か null
  *   items … [['item' => 見出し, 'value' => 中身, 'url' => リンク先か null], …]
  */
 function pv_read_info(array $config, string $relative): ?array
@@ -285,7 +286,7 @@ function pv_read_info(array $config, string $relative): ?array
         return null;
     }
 
-    // 説明の書かれた小さなファイルのはずなので、大きすぎるものは読まない
+    // 情報の書かれた小さなファイルのはずなので、大きすぎるものは読まない
     $size = filesize($path);
 
     if ($size === false || $size > 64 * 1024) {
@@ -330,7 +331,19 @@ function pv_info_thumb(array $config, string $relative, string $name): ?array
     }
 
     if (strtolower($name) === PV_INFO_RANDOM) {
-        return pv_random_thumb($config, $relative);
+        return pv_random_thumb($config, $relative, null);
+    }
+
+    // random:フォルダ … 選ぶ範囲を決めた書き方。
+    // 「random:」だけならホーム全体から選ぶ。
+    $prefix = PV_INFO_RANDOM . ':';
+
+    if (strncasecmp($name, $prefix, strlen($prefix)) === 0) {
+        return pv_random_thumb(
+            $config,
+            $relative,
+            pv_normalize_relative(substr($name, strlen($prefix)))
+        );
     }
 
     $extensions = pv_image_extensions($config);
@@ -362,45 +375,52 @@ function pv_info_thumb(array $config, string $relative, string $name): ?array
 /**
  * ルートからの相対パスを、サムネイルとして使う形にする。
  * random は「毎回選び直したもの」という印で、編集画面での選び直しに使う。
+ * randomFrom は選ぶ範囲。null なら info.yml のあるフォルダ以下という意味。
  */
-function pv_thumb_of(array $config, string $relative, bool $random = false): array
+function pv_thumb_of(array $config, string $relative, bool $random = false, ?string $randomFrom = null): array
 {
     $slash = strrpos($relative, '/');
 
     return [
-        'path'   => $relative,
-        'url'    => pv_image_url(
+        'path'       => $relative,
+        'url'        => pv_image_url(
             $config['album_url'],
             $slash === false ? '' : substr($relative, 0, $slash),
             $slash === false ? $relative : substr($relative, $slash + 1)
         ),
-        'random' => $random,
+        'random'     => $random,
+        'randomFrom' => $randomFrom,
     ];
 }
 
 /**
- * thumbnail: random のときに使う、そのフォルダ以下の画像から1枚。
+ * thumbnail: random のときに使う、フォルダ以下の画像から1枚。
  * 表示するたびに選び直すので、開くたびに絵が変わる。
+ *
+ * $from に null を渡すと、info.yml のあるフォルダ（$relative）以下から選ぶ。
+ * 文字列を渡すと、そのフォルダ以下から選ぶ（空文字はホーム全体）。
+ * 指したフォルダが見つからないときは、絵なしとして扱う。
  *
  * 大きなフォルダでも重くならないよう、探す深さと枚数に上限を設けている。
  * 上限に達したら、そこまでに見つかった中から選ぶ。
  */
-function pv_random_thumb(array $config, string $relative): ?array
+function pv_random_thumb(array $config, string $relative, ?string $from = null): ?array
 {
-    $dir = pv_resolve_dir($config['album_dir'], $relative);
+    $target = $from ?? $relative;
+    $dir    = pv_resolve_dir($config['album_dir'], $target);
 
     if ($dir === null) {
         return null;
     }
 
     $found = [];
-    pv_collect_images($dir, $relative, pv_image_extensions($config), 1, 5, 200, $found);
+    pv_collect_images($dir, $target, pv_image_extensions($config), 1, 5, 200, $found);
 
     if ($found === []) {
         return null;
     }
 
-    return pv_thumb_of($config, $found[array_rand($found)], true);
+    return pv_thumb_of($config, $found[array_rand($found)], true, $from);
 }
 
 /**

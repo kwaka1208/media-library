@@ -189,13 +189,13 @@ function pv_do_rename(array $config, string $relative, string $newName): array
 }
 
 /**
- * フォルダの説明（info.yml）を書き込む。
+ * フォルダ情報（info.yml）を書き込む。
  *
  * 対象はいま開いているフォルダ1つだけ。書き換えるのは title / thumbnail / items で、
  * 手で書き足したコメントやほかのキーは残らない。
- * すべて空のときは、説明をやめる操作とみなして info.yml をゴミ箱へ移す。
+ * すべて空のときは、情報をやめる操作とみなして info.yml をゴミ箱へ移す。
  */
-function pv_do_info(array $config, string $dirRelative, string $title, string $thumbnail, array $items): array
+function pv_do_info(array $config, string $dirRelative, string $title, string $thumbnail, array $items, string $randomFrom = 'self'): array
 {
     $relative = pv_clean_relative($dirRelative);
     $dir      = pv_resolve_dir($config['album_dir'], $relative);
@@ -205,7 +205,7 @@ function pv_do_info(array $config, string $dirRelative, string $title, string $t
     }
 
     if (!is_writable($dir)) {
-        return ['ok' => false, 'message' => 'このフォルダに書き込む権限がないため、説明を保存できませんでした。'];
+        return ['ok' => false, 'message' => 'このフォルダに書き込む権限がないため、フォルダ情報を保存できませんでした。'];
     }
 
     $path = $dir . '/' . PV_INFO_FILE;
@@ -217,9 +217,9 @@ function pv_do_info(array $config, string $dirRelative, string $title, string $t
 
     $title = pv_info_field($title, 200);
 
-    $thumbnail = pv_info_input_thumb($config, $relative, $thumbnail);
+    $thumbnail = pv_info_input_thumb($config, $relative, $thumbnail, $randomFrom);
     if ($thumbnail === null) {
-        return ['ok' => false, 'message' => '選ばれたサムネイルの画像が見つかりませんでした。'];
+        return ['ok' => false, 'message' => '選ばれたサムネイル、またはランダムに選ぶフォルダが見つかりませんでした。'];
     }
 
     $rows = pv_info_input_items($items);
@@ -239,27 +239,27 @@ function pv_do_info(array $config, string $dirRelative, string $title, string $t
     if (@file_put_contents($temp, $yaml, LOCK_EX) === false) {
         @unlink($temp);
 
-        return ['ok' => false, 'message' => '説明を保存できませんでした。書き込み権限を確認してください。'];
+        return ['ok' => false, 'message' => 'フォルダ情報を保存できませんでした。書き込み権限を確認してください。'];
     }
 
     if (!@rename($temp, $path)) {
         @unlink($temp);
 
-        return ['ok' => false, 'message' => '説明を保存できませんでした。書き込み権限を確認してください。'];
+        return ['ok' => false, 'message' => 'フォルダ情報を保存できませんでした。書き込み権限を確認してください。'];
     }
 
     @chmod($path, 0644);
 
-    return ['ok' => true, 'message' => 'フォルダの説明を保存しました。'];
+    return ['ok' => true, 'message' => 'フォルダ情報を保存しました。'];
 }
 
 /**
- * 説明をやめる操作。info.yml をゴミ箱へ移す。
+ * 情報をやめる操作。info.yml をゴミ箱へ移す。
  */
 function pv_info_remove(array $config, string $relative, string $path): array
 {
     if (!file_exists($path)) {
-        return ['ok' => true, 'message' => 'フォルダの説明はありません。'];
+        return ['ok' => true, 'message' => 'フォルダ情報はありません。'];
     }
 
     $bucket = pv_trash_bucket($config);
@@ -288,7 +288,7 @@ function pv_info_remove(array $config, string $relative, string $path): array
         return ['ok' => false, 'message' => 'ゴミ箱へ移動できませんでした。書き込み権限を確認してください。'];
     }
 
-    return ['ok' => true, 'message' => 'フォルダの説明をゴミ箱へ移動しました。'];
+    return ['ok' => true, 'message' => 'フォルダ情報をゴミ箱へ移動しました。'];
 }
 
 /**
@@ -310,8 +310,12 @@ function pv_info_field(string $value, int $maxLength): string
  * 選ばれたサムネイルを確かめる。
  * 使えるのは「空」「random」「そのフォルダにある画像のファイル名」のみ。
  * 見つからないものが指定されたときは null を返す。
+ *
+ * $randomFrom は「ランダム」を選んだときの範囲。編集画面から送られてくる。
+ *   'self'        … info.yml のあるフォルダ以下（従来どおり。random とだけ書く）
+ *   'root:<パス>' … そのフォルダ以下（空文字ならホーム全体。random:<パス> と書く）
  */
-function pv_info_input_thumb(array $config, string $relative, string $thumbnail): ?string
+function pv_info_input_thumb(array $config, string $relative, string $thumbnail, string $randomFrom = 'self'): ?string
 {
     $thumbnail = pv_info_field($thumbnail, 255);
 
@@ -320,7 +324,7 @@ function pv_info_input_thumb(array $config, string $relative, string $thumbnail)
     }
 
     if (strtolower($thumbnail) === PV_INFO_RANDOM) {
-        return PV_INFO_RANDOM;
+        return pv_info_input_random($config, $randomFrom);
     }
 
     // フォルダをまたぐ指定は編集画面からは選べないので、ここでは受け付けない
@@ -335,6 +339,28 @@ function pv_info_input_thumb(array $config, string $relative, string $thumbnail)
     }
 
     return $thumbnail;
+}
+
+/**
+ * 「ランダム」を選んだときの範囲を確かめ、info.yml に書く形にする。
+ * 指されたフォルダが見つからないときは null を返す。
+ */
+function pv_info_input_random(array $config, string $randomFrom): ?string
+{
+    $prefix = 'root:';
+
+    if (strncmp($randomFrom, $prefix, strlen($prefix)) !== 0) {
+        // 'self'（と、それ以外の見慣れない値）は、従来どおり自分以下として扱う
+        return PV_INFO_RANDOM;
+    }
+
+    $from = pv_clean_relative(substr($randomFrom, strlen($prefix)));
+
+    if (pv_resolve_dir($config['album_dir'], $from) === null) {
+        return null;
+    }
+
+    return PV_INFO_RANDOM . ':' . $from;
 }
 
 /**
