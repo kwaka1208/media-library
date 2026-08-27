@@ -59,7 +59,7 @@ if ($dir === null) {
 if ($dir !== null && $error === null) {
     $scanned = pv_scan($dir, $extensions);
 
-    // フォルダに置かれた情報（info.yml）を、ここで1回だけ読む。
+    // フォルダに置かれた情報（info.json）を、ここで1回だけ読む。
     // 絞り込みでも一覧の表示でも使うため。
     // 一覧で使うのは見出しだけなので、サムネイルは確かめない。
     // thumbnail: random のフォルダを毎回探し回らずに済む。
@@ -85,8 +85,8 @@ if ($dir !== null && $error === null) {
     }
 }
 
-// ---- フォルダに置かれた情報（info.yml）---------------------------
-// 開いているフォルダに info.yml があれば、その中身を一覧の横に出す。
+// ---- フォルダに置かれた情報（info.json）---------------------------
+// 開いているフォルダに info.json があれば、その中身を一覧の横に出す。
 // まだ無いフォルダには、フォルダ名と先頭の画像で1つ作ってから読む。
 if ($dir !== null && $error === null) {
     pv_create_default_info($config, $relative);
@@ -124,7 +124,7 @@ $crumbs   = pv_breadcrumbs($relative);
 $crumbs[0]['name'] = $rootLabel; // パンくずの先頭は、いま開いているルートの名前にする
 $parent   = $relative === '' ? null : pv_normalize_relative(dirname($relative) === '.' ? '' : dirname($relative));
 
-// パンくずにも、info.yml のタイトルがあればそれを出す。
+// パンくずにも、info.json のタイトルがあればそれを出す。
 // label は画面に出す名前、name は実際のフォルダ名で、こちらは吹き出しに使う。
 // 先頭（写真・動画のルート）は、タブの名前と揃えたいのでそのままにする。
 $lastIndex = count($crumbs) - 1;
@@ -378,7 +378,7 @@ if ($error === null) {
 <main class="content">
 
 <?php if ($info !== null): ?>
-<?php // info.yml のあるフォルダで出す情報。広い画面では一覧の左、狭い画面では上。
+<?php // info.json のあるフォルダで出す情報。広い画面では一覧の左、狭い画面では上。
       // 枚数とページ送りは、その情報の下にそろえて置く。 ?>
 <div class="side">
 <aside class="info-panel" aria-label="このフォルダの情報">
@@ -436,7 +436,7 @@ if ($error === null) {
     <ul class="folders">
         <?php foreach ($dirs as $item): ?>
             <?php $childPath = $relative === '' ? $item['name'] : $relative . '/' . $item['name']; ?>
-            <?php // info.yml があるフォルダは、フォルダ名の代わりにその見出しとサムネイルで見せる ?>
+            <?php // info.json があるフォルダは、フォルダ名の代わりにその見出しとサムネイルで見せる ?>
             <?php $childInfo = $item['info']; ?>
             <?php $label = ($childInfo !== null && $childInfo['title'] !== '')
                 ? $childInfo['title']
@@ -618,7 +618,7 @@ if ($error === null) {
 </div>
 
 <!-- 新しいフォルダ -->
-<?php // フォルダ情報（info.yml）の編集。右クリックまたは「⋯ メニュー」から開く。 ?>
+<?php // フォルダ情報（info.json）の編集。右クリックまたは「⋯ メニュー」から開く。 ?>
 <div class="modal" id="infoModal" hidden data-modal-keep>
     <form class="modal-panel wide" method="post" action="action.php">
         <h2 class="modal-title">フォルダ情報</h2>
@@ -744,7 +744,7 @@ if ($error === null) {
         </div>
 
         <p class="modal-note">
-            保存すると <code>info.yml</code> を書き換えます。手で書き足したコメントは残りません。
+            保存すると <code>info.json</code> を書き換えます。手で書き足したほかの項目は残りません。
             タイトル・サムネイル・項目をすべて空にして保存すると、フォルダ情報はゴミ箱へ移動します。
         </p>
 

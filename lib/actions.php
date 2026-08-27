@@ -189,11 +189,11 @@ function pv_do_rename(array $config, string $relative, string $newName): array
 }
 
 /**
- * フォルダ情報（info.yml）を書き込む。
+ * フォルダ情報（info.json）を書き込む。
  *
  * 対象はいま開いているフォルダ1つだけ。書き換えるのは title / thumbnail / items で、
- * 手で書き足したコメントやほかのキーは残らない。
- * すべて空のときは、情報をやめる操作とみなして info.yml をゴミ箱へ移す。
+ * 手で書き足したほかのキーは残らない。
+ * すべて空のときは、情報をやめる操作とみなして info.json をゴミ箱へ移す。
  */
 function pv_do_info(array $config, string $dirRelative, string $title, string $thumbnail, array $items, string $randomFrom = 'self'): array
 {
@@ -231,12 +231,12 @@ function pv_do_info(array $config, string $dirRelative, string $title, string $t
         return pv_info_remove($config, $relative, $path);
     }
 
-    $yaml = pv_yaml_dump($title, $thumbnail, $rows);
+    $json = pv_info_encode($title, $thumbnail, $rows);
 
     // 書きかけのファイルが残らないよう、別の名前で書いてから置き換える
     $temp = $dir . '/.' . PV_INFO_FILE . '.' . bin2hex(random_bytes(4)) . '.tmp';
 
-    if (@file_put_contents($temp, $yaml, LOCK_EX) === false) {
+    if (@file_put_contents($temp, $json, LOCK_EX) === false) {
         @unlink($temp);
 
         return ['ok' => false, 'message' => 'フォルダ情報を保存できませんでした。書き込み権限を確認してください。'];
@@ -254,7 +254,7 @@ function pv_do_info(array $config, string $dirRelative, string $title, string $t
 }
 
 /**
- * 情報をやめる操作。info.yml をゴミ箱へ移す。
+ * 情報をやめる操作。info.json をゴミ箱へ移す。
  */
 function pv_info_remove(array $config, string $relative, string $path): array
 {
@@ -312,7 +312,7 @@ function pv_info_field(string $value, int $maxLength): string
  * 見つからないものが指定されたときは null を返す。
  *
  * $randomFrom は「ランダム」を選んだときの範囲。編集画面から送られてくる。
- *   'self'        … info.yml のあるフォルダ以下（従来どおり。random とだけ書く）
+ *   'self'        … info.json のあるフォルダ以下（従来どおり。random とだけ書く）
  *   'root:<パス>' … そのフォルダ以下（空文字ならホーム全体。random:<パス> と書く）
  */
 function pv_info_input_thumb(array $config, string $relative, string $thumbnail, string $randomFrom = 'self'): ?string
@@ -342,7 +342,7 @@ function pv_info_input_thumb(array $config, string $relative, string $thumbnail,
 }
 
 /**
- * 「ランダム」を選んだときの範囲を確かめ、info.yml に書く形にする。
+ * 「ランダム」を選んだときの範囲を確かめ、info.json に書く形にする。
  * 指されたフォルダが見つからないときは null を返す。
  */
 function pv_info_input_random(array $config, string $randomFrom): ?string
@@ -633,7 +633,7 @@ function pv_do_mkdir(array $config, string $parentRelative, string $name): array
  * 初期設定の「フォルダ情報を作成する」。
  *
  * 写真・動画それぞれのルート配下にあるフォルダを一通り見て、
- * info.yml の無いところにだけ作る。すでにあるものには手を触れないので、
+ * info.json の無いところにだけ作る。すでにあるものには手を触れないので、
  * 何度押しても、手で書いた内容が消えることはない。
  *
  * ルート自身（写真・動画のトップ）は対象にしない。フォルダ名がそのまま

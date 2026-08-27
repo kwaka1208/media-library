@@ -321,7 +321,7 @@ a { color: var(--accent); }
     white-space: nowrap;
 }
 
-/* info.yml の見出しはフォルダ名より長くなりがちなので、2行まで折り返す */
+/* info.json の見出しはフォルダ名より長くなりがちなので、2行まで折り返す */
 .folder.has-info .folder-name {
     display: -webkit-box;
     -webkit-box-orient: vertical;
@@ -1275,7 +1275,7 @@ body[data-view="list"] .card:has(.thumb:focus-visible) {
     outline-offset: 1px;
 }
 
-/* ---- フォルダの説明（info.yml） ---- */
+/* ---- フォルダの説明（info.json） ---- */
 
 /* 説明と、その下の枚数・ページ送りをまとめた列。
    広い画面では一覧の左に置き、貼り付いたヘッダーの下に収まるようにする。

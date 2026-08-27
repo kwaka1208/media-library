@@ -3,12 +3,12 @@
  * Media Library 共通関数
  */
 
-require_once __DIR__ . '/yaml.php';
+require_once __DIR__ . '/json.php';
 
 // フォルダに置くと、そのフォルダの情報として表示されるファイルの名前
-const PV_INFO_FILE = 'info.yml';
+const PV_INFO_FILE = 'info.json';
 
-// info.yml の thumbnail にこう書くと、そのフォルダ以下から1枚を選んで出す
+// info.json の thumbnail にこう書くと、そのフォルダ以下から1枚を選んで出す
 const PV_INFO_RANDOM = 'random';
 
 /**
@@ -66,7 +66,7 @@ function pv_video_extensions(array $config): array
 
 /**
  * 画像として扱う拡張子の一覧。kind が image のルートの設定をまとめて返す。
- * info.yml のサムネイルは、動画のフォルダでも画像を指すため、
+ * info.json のサムネイルは、動画のフォルダでも画像を指すため、
  * いま開いているルートに関係なく、この一覧で確かめる。
  */
 function pv_image_extensions(array $config): array
@@ -262,14 +262,14 @@ function pv_count_images(string $dir, array $extensions): int
 }
 
 /**
- * フォルダに置かれた info.yml を読み、表示に使う形に整えて返す。
+ * フォルダに置かれた info.json を読み、表示に使う形に整えて返す。
  * ファイルがない・読めない・中身が空のときは null を返す。
  *
  * 返り値
  *   title … 見出しにする名前（無いこともある）
  *   thumb … ['path' => ルートからの相対パス, 'url' => 表示に使うURL,
  *            'random' => 毎回選び直したものか,
- *            'randomFrom' => 選ぶ範囲（null なら info.yml のあるフォルダ以下）] か null
+ *            'randomFrom' => 選ぶ範囲（null なら info.json のあるフォルダ以下）] か null
  *   items … [['item' => 見出し, 'value' => 中身, 'url' => リンク先か null], …]
  *
  * $withThumb に false を渡すと、サムネイルを実在する画像として確かめる処理を省き、
@@ -304,12 +304,12 @@ function pv_read_info(array $config, string $relative, bool $withThumb = true): 
         return null;
     }
 
-    $data = pv_yaml_parse($raw);
+    $data = pv_info_decode($raw);
 
-    $thumbnail = trim((string) ($data['thumbnail'] ?? ''));
+    $thumbnail = trim(pv_info_scalar($data['thumbnail'] ?? null));
 
     $info = [
-        'title' => trim((string) ($data['title'] ?? '')),
+        'title' => trim(pv_info_scalar($data['title'] ?? null)),
         'thumb' => $withThumb ? pv_info_thumb($config, $relative, $thumbnail) : null,
         'items' => pv_info_items($data['items'] ?? []),
     ];
@@ -326,7 +326,7 @@ function pv_read_info(array $config, string $relative, bool $withThumb = true): 
 }
 
 /**
- * info.yml のないフォルダに、はじめの1つを作っておく。
+ * info.json のないフォルダに、はじめの1つを作っておく。
  *
  * 見出しはフォルダ名、サムネイルはフォルダ直下の画像をファイル名の昇順に
  * 並べたときの先頭の1枚。画像が1枚もないフォルダでは見出しだけを書く。
@@ -366,16 +366,16 @@ function pv_create_default_info(array $config, string $relative): bool
     $images    = pv_sort(pv_scan($dir, pv_image_extensions($config))['files'], 'name', 'asc');
     $thumbnail = $images === [] ? '' : (string) $images[0]['name'];
 
-    $yaml = pv_yaml_dump($title, $thumbnail, []);
+    $json = pv_info_encode($title, $thumbnail, []);
 
-    if ($yaml === '') {
+    if ($json === '') {
         return false;
     }
 
     // 書きかけのファイルが残らないよう、別の名前で書いてから置き換える
     $temp = $dir . '/.' . PV_INFO_FILE . '.' . bin2hex(random_bytes(4)) . '.tmp';
 
-    if (@file_put_contents($temp, $yaml, LOCK_EX) === false) {
+    if (@file_put_contents($temp, $json, LOCK_EX) === false) {
         @unlink($temp);
 
         return false;
@@ -393,10 +393,10 @@ function pv_create_default_info(array $config, string $relative): bool
 }
 
 /**
- * ルート配下のフォルダを見て、info.yml のあるもの・無いものを数える。
+ * ルート配下のフォルダを見て、info.json のあるもの・無いものを数える。
  * 初期設定の画面で「あと何フォルダぶん作るのか」を先に見せるために使う。
  *
- * 返り値 ['total' => フォルダの数, 'missing' => info.yml の無いフォルダの数]
+ * 返り値 ['total' => フォルダの数, 'missing' => info.json の無いフォルダの数]
  * ルート自身（写真・動画のトップ）は、そこには作らないので数に入れない。
  */
 function pv_count_info_status(array $config): array
@@ -426,9 +426,9 @@ function pv_count_info_status(array $config): array
 }
 
 /**
- * info.yml の thumbnail を、実在する画像として確かめる。
+ * info.json の thumbnail を、実在する画像として確かめる。
  *
- * 書き方は2とおり。まず info.yml と同じフォルダにあるものとして探し、
+ * 書き方は2とおり。まず info.json と同じフォルダにあるものとして探し、
  * 見つからなければ、写真（動画）ルートからの相対パスとして探す。
  * どちらの場合も pv_resolve_file() を通すので、ルートの外や隠しファイルは指せない。
  */
@@ -485,7 +485,7 @@ function pv_info_thumb(array $config, string $relative, string $name): ?array
 /**
  * ルートからの相対パスを、サムネイルとして使う形にする。
  * random は「毎回選び直したもの」という印で、編集画面での選び直しに使う。
- * randomFrom は選ぶ範囲。null なら info.yml のあるフォルダ以下という意味。
+ * randomFrom は選ぶ範囲。null なら info.json のあるフォルダ以下という意味。
  */
 function pv_thumb_of(array $config, string $relative, bool $random = false, ?string $randomFrom = null): array
 {
@@ -507,7 +507,7 @@ function pv_thumb_of(array $config, string $relative, bool $random = false, ?str
  * thumbnail: random のときに使う、フォルダ以下の画像から1枚。
  * 表示するたびに選び直すので、開くたびに絵が変わる。
  *
- * $from に null を渡すと、info.yml のあるフォルダ（$relative）以下から選ぶ。
+ * $from に null を渡すと、info.json のあるフォルダ（$relative）以下から選ぶ。
  * 文字列を渡すと、そのフォルダ以下から選ぶ（空文字はホーム全体）。
  * 指したフォルダが見つからないときは、絵なしとして扱う。
  *
@@ -581,7 +581,27 @@ function pv_collect_images(string $dir, string $relative, array $extensions, int
 }
 
 /**
- * info.yml の items を、item / value / url の組に整える。
+ * info.json から読んだ値を、表示に使う文字ならびにする。
+ *
+ * JSON では数や true / false、さらに [ ] や { } も書けてしまう。
+ * 文字ならびにできないものは、書かれていないものとして扱う。
+ * 数で書かれた 24 や 2026 は、そのままの見た目で読む。
+ */
+function pv_info_scalar($value): string
+{
+    if (is_string($value)) {
+        return $value;
+    }
+
+    if (is_int($value) || is_float($value)) {
+        return (string) $value;
+    }
+
+    return '';
+}
+
+/**
+ * info.json の items を、item / value / url の組に整える。
  * item も value も空の行は、表示するものが無いので落とす。
  */
 function pv_info_items($raw): array
@@ -597,8 +617,8 @@ function pv_info_items($raw): array
             continue;
         }
 
-        $item  = trim((string) ($one['item'] ?? ''));
-        $value = trim((string) ($one['value'] ?? ''));
+        $item  = trim(pv_info_scalar($one['item'] ?? null));
+        $value = trim(pv_info_scalar($one['value'] ?? null));
 
         if ($item === '' && $value === '') {
             continue;
@@ -607,7 +627,7 @@ function pv_info_items($raw): array
         $items[] = [
             'item'  => $item,
             'value' => $value,
-            'url'   => pv_info_url((string) ($one['url'] ?? '')),
+            'url'   => pv_info_url(pv_info_scalar($one['url'] ?? null)),
         ];
     }
 
@@ -685,7 +705,7 @@ function pv_filter(array $items, string $keyword): array
     $needle = mb_strtolower($keyword, 'UTF-8');
 
     return array_values(array_filter($items, function (array $item) use ($needle) {
-        // info.yml で見出しを付けたフォルダは、画面に出ている見出しでも探せるようにする
+        // info.json で見出しを付けたフォルダは、画面に出ている見出しでも探せるようにする
         $haystacks = [$item['name']];
 
         if (isset($item['title']) && $item['title'] !== '') {

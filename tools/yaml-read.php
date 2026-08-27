@@ -2,6 +2,10 @@
 /**
  * Media Library : info.yml を読むための、小さなYAMLの読み取り
  *
+ * フォルダ情報は info.json に変わったため、これを使うのは
+ * tools/convert-info.php（info.yml から info.json への一括変換）だけ。
+ * アプリ本体からは読み込まれない。
+ *
  * 扱うのは info.yml に必要な書き方だけに絞っている。
  *
  *     title: 2026年 春の遠足
@@ -118,75 +122,6 @@ function pv_yaml_parse(string $yaml): array
     }
 
     return $data;
-}
-
-/**
- * info.yml を書き出す。編集画面から保存するときに使う。
- *
- * 書き出すのは title / thumbnail / items だけ。手で書き足したコメントや
- * ほかのキーは残らないので、そのことは README に断っている。
- */
-function pv_yaml_dump(string $title, string $thumbnail, array $items): string
-{
-    $lines = [];
-
-    if ($title !== '') {
-        $lines[] = 'title: ' . pv_yaml_quote($title);
-    }
-
-    if ($thumbnail !== '') {
-        $lines[] = 'thumbnail: ' . pv_yaml_quote($thumbnail);
-    }
-
-    if ($items !== []) {
-        $lines[] = 'items:';
-
-        foreach ($items as $one) {
-            $lines[] = '  - item: ' . pv_yaml_quote((string) ($one['item'] ?? ''));
-            $lines[] = '    value: ' . pv_yaml_quote((string) ($one['value'] ?? ''));
-
-            if (($one['url'] ?? '') !== '') {
-                $lines[] = '    url: ' . pv_yaml_quote((string) $one['url']);
-            }
-        }
-    }
-
-    return $lines === [] ? '' : implode("\n", $lines) . "\n";
-}
-
-/**
- * 値を書き出す形にする。そのままでは読み違えられる値だけ、" で囲む。
- *
- * 囲むのは、空のとき、前後に空白があるとき、# や : を含むとき、
- * 記号で始まるとき（- や " など、YAML で意味を持つもの）。
- */
-function pv_yaml_quote(string $value): string
-{
-    if ($value === '' || trim($value) !== $value) {
-        return '"' . pv_yaml_escape($value) . '"';
-    }
-
-    if (strpbrk($value, "#:\n\r\t") !== false) {
-        return '"' . pv_yaml_escape($value) . '"';
-    }
-
-    if (strpbrk($value[0], "-?:,[]{}#&*!|>'\"%@`") !== false) {
-        return '"' . pv_yaml_escape($value) . '"';
-    }
-
-    return $value;
-}
-
-/**
- * " で囲むときの、中身の逃がし方。
- */
-function pv_yaml_escape(string $value): string
-{
-    return str_replace(
-        ['\\', '"', "\n", "\r", "\t"],
-        ['\\\\', '\\"', '\\n', '', '\\t'],
-        $value
-    );
 }
 
 /**

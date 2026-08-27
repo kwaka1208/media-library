@@ -272,7 +272,7 @@
         input.focus();
     }
 
-    // ---- フォルダ情報（info.yml）の編集 ------------------------------
+    // ---- フォルダ情報（info.json）の編集 ------------------------------
 
     var infoModal = document.getElementById('infoModal');
     var infoRows  = infoModal ? infoModal.querySelector('[data-info-rows]') : null;

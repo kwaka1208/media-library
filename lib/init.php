@@ -21,7 +21,7 @@ $token    = pv_csrf_token();
 $messages = pv_take_flash();
 $readOnly = !empty($config['read_only']);
 
-// ルートごとに、フォルダの数と info.yml の無い数を数えておく。
+// ルートごとに、フォルダの数と info.json の無い数を数えておく。
 // 押す前に「あと何件なのか」がわかるようにするため。
 $status       = [];
 $totalMissing = 0;
@@ -74,12 +74,12 @@ foreach ($config['roots'] as $key => $rootConfig) {
     <h2 class="setup-title">フォルダ情報を作成する</h2>
 
     <p class="setup-text">
-        <code>info.yml</code> のないフォルダに、まとめて作ります。見出しはフォルダ名、
+        <code>info.json</code> のないフォルダに、まとめて作ります。見出しはフォルダ名、
         サムネイルはそのフォルダの画像をファイル名の昇順に並べた先頭の1枚です。
     </p>
 
     <p class="setup-text">
-        すでに <code>info.yml</code> のあるフォルダには手を触れないので、
+        すでに <code>info.json</code> のあるフォルダには手を触れないので、
         何度実行しても、手で書いた内容が消えることはありません。
         写真・動画のトップは、フォルダ名がそのまま見出しになってしまうため対象外です。
     </p>
