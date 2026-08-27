@@ -448,14 +448,7 @@ if ($error === null) {
                 <?php endif; ?>
                 <a class="folder<?= $childInfo !== null ? ' has-info' : '' ?>"
                    href="<?= h(pv_url(['path' => $childPath] + $navArgs)) ?>">
-                    <?php if ($childInfo !== null && $childInfo['thumb'] !== null): ?>
-                        <span class="folder-thumb">
-                            <img src="<?= h($childInfo['thumb']['url']) ?>" alt=""
-                                 loading="lazy" decoding="async">
-                        </span>
-                    <?php else: ?>
-                        <span class="folder-icon" aria-hidden="true">📁</span>
-                    <?php endif; ?>
+                    <span class="folder-icon" aria-hidden="true">📁</span>
                     <span class="folder-name" title="<?= h($item['name']) ?>"><?= h($label) ?></span>
                     <span class="folder-count"><?= (int) $item['count'] ?></span>
                 </a>
