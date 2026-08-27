@@ -61,9 +61,11 @@ if ($dir !== null && $error === null) {
 
     // フォルダに置かれた情報（info.yml）を、ここで1回だけ読む。
     // 絞り込みでも一覧の表示でも使うため。
+    // 一覧で使うのは見出しだけなので、サムネイルは確かめない。
+    // thumbnail: random のフォルダを毎回探し回らずに済む。
     foreach ($scanned['dirs'] as $index => $item) {
         $childPath = $relative === '' ? $item['name'] : $relative . '/' . $item['name'];
-        $childInfo = pv_read_info($config, $childPath);
+        $childInfo = pv_read_info($config, $childPath, false);
 
         $scanned['dirs'][$index]['info']  = $childInfo;
         $scanned['dirs'][$index]['title'] = $childInfo === null ? '' : $childInfo['title'];
@@ -134,8 +136,9 @@ foreach ($crumbs as $index => $crumb) {
         continue;
     }
 
-    // 現在地は、上ですでに読んだものを使い回す
-    $crumbInfo = $index === $lastIndex ? $info : pv_read_info($config, $crumb['path']);
+    // 現在地は、上ですでに読んだものを使い回す。
+    // 途中の階層は見出しにしか使わないので、サムネイルは確かめない。
+    $crumbInfo = $index === $lastIndex ? $info : pv_read_info($config, $crumb['path'], false);
 
     if ($crumbInfo !== null && $crumbInfo['title'] !== '') {
         $crumbs[$index]['label'] = $crumbInfo['title'];

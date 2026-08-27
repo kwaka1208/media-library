@@ -271,8 +271,13 @@ function pv_count_images(string $dir, array $extensions): int
  *            'random' => 毎回選び直したものか,
  *            'randomFrom' => 選ぶ範囲（null なら info.yml のあるフォルダ以下）] か null
  *   items … [['item' => 見出し, 'value' => 中身, 'url' => リンク先か null], …]
+ *
+ * $withThumb に false を渡すと、サムネイルを実在する画像として確かめる処理を省き、
+ * thumb は常に null になる。thumbnail: random はフォルダ以下を探し回るため、
+ * 一覧のようにサムネイルを使わない場面では、これを省くと目に見えて軽くなる。
+ * このとき「中身が空か」の判定は、thumbnail に何か書かれているかどうかで代える。
  */
-function pv_read_info(array $config, string $relative): ?array
+function pv_read_info(array $config, string $relative, bool $withThumb = true): ?array
 {
     $dir = pv_resolve_dir($config['album_dir'], $relative);
 
@@ -301,14 +306,19 @@ function pv_read_info(array $config, string $relative): ?array
 
     $data = pv_yaml_parse($raw);
 
+    $thumbnail = trim((string) ($data['thumbnail'] ?? ''));
+
     $info = [
         'title' => trim((string) ($data['title'] ?? '')),
-        'thumb' => pv_info_thumb($config, $relative, (string) ($data['thumbnail'] ?? '')),
+        'thumb' => $withThumb ? pv_info_thumb($config, $relative, $thumbnail) : null,
         'items' => pv_info_items($data['items'] ?? []),
     ];
 
-    // 表示できるものが何も無いなら、ファイルが無いのと同じ扱いにする
-    if ($info['title'] === '' && $info['thumb'] === null && $info['items'] === []) {
+    // 表示できるものが何も無いなら、ファイルが無いのと同じ扱いにする。
+    // サムネイルを確かめていないときは、書かれてさえいれば中身ありとみなす。
+    $hasThumb = $withThumb ? $info['thumb'] !== null : $thumbnail !== '';
+
+    if ($info['title'] === '' && !$hasThumb && $info['items'] === []) {
         return null;
     }
 
