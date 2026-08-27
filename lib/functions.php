@@ -316,6 +316,106 @@ function pv_read_info(array $config, string $relative): ?array
 }
 
 /**
+ * info.yml のないフォルダに、はじめの1つを作っておく。
+ *
+ * 見出しはフォルダ名、サムネイルはフォルダ直下の画像をファイル名の昇順に
+ * 並べたときの先頭の1枚。画像が1枚もないフォルダでは見出しだけを書く。
+ *
+ * 作ったときだけ true を返す。作らなかった・作れなかったときは false で、
+ * 呼び出し側は何事もなかったように表示を続ける。閲覧のついでに動く処理なので、
+ * 書き込めないサーバーでも画面が止まらないようにしている。
+ *
+ * 対象はいま開いているフォルダ1つだけ。ルート（写真・動画のトップ）では作らない。
+ * フォルダ名がそのまま見出しになってしまい、意味のある名前にならないため。
+ */
+function pv_create_default_info(array $config, string $relative): bool
+{
+    if ($relative === '' || !empty($config['read_only'])) {
+        return false;
+    }
+
+    $dir = pv_resolve_dir($config['album_dir'], $relative);
+
+    if ($dir === null || !is_writable($dir)) {
+        return false;
+    }
+
+    $path = $dir . '/' . PV_INFO_FILE;
+
+    // 同じ名前でファイル・フォルダ・リンクが置かれているときは触らない
+    if (file_exists($path) || is_link($path)) {
+        return false;
+    }
+
+    // 見出しはフォルダ名。区切りは / に揃えてあるので、後ろの1つを取る。
+    $names = explode('/', $relative);
+    $title = (string) end($names);
+
+    // サムネイルは、このフォルダ直下の画像を名前順に並べた先頭の1枚。
+    // 動画のフォルダでもサムネイルは画像なので、画像の拡張子で探す。
+    $images    = pv_sort(pv_scan($dir, pv_image_extensions($config))['files'], 'name', 'asc');
+    $thumbnail = $images === [] ? '' : (string) $images[0]['name'];
+
+    $yaml = pv_yaml_dump($title, $thumbnail, []);
+
+    if ($yaml === '') {
+        return false;
+    }
+
+    // 書きかけのファイルが残らないよう、別の名前で書いてから置き換える
+    $temp = $dir . '/.' . PV_INFO_FILE . '.' . bin2hex(random_bytes(4)) . '.tmp';
+
+    if (@file_put_contents($temp, $yaml, LOCK_EX) === false) {
+        @unlink($temp);
+
+        return false;
+    }
+
+    if (!@rename($temp, $path)) {
+        @unlink($temp);
+
+        return false;
+    }
+
+    @chmod($path, 0644);
+
+    return true;
+}
+
+/**
+ * ルート配下のフォルダを見て、info.yml のあるもの・無いものを数える。
+ * 初期設定の画面で「あと何フォルダぶん作るのか」を先に見せるために使う。
+ *
+ * 返り値 ['total' => フォルダの数, 'missing' => info.yml の無いフォルダの数]
+ * ルート自身（写真・動画のトップ）は、そこには作らないので数に入れない。
+ */
+function pv_count_info_status(array $config): array
+{
+    $total   = 0;
+    $missing = 0;
+
+    foreach (pv_folder_tree($config['album_dir']) as $folder) {
+        if ($folder['path'] === '') {
+            continue;
+        }
+
+        $dir = pv_resolve_dir($config['album_dir'], $folder['path']);
+
+        if ($dir === null) {
+            continue;
+        }
+
+        $total++;
+
+        if (!file_exists($dir . '/' . PV_INFO_FILE)) {
+            $missing++;
+        }
+    }
+
+    return ['total' => $total, 'missing' => $missing];
+}
+
+/**
  * info.yml の thumbnail を、実在する画像として確かめる。
  *
  * 書き方は2とおり。まず info.yml と同じフォルダにあるものとして探し、
@@ -767,6 +867,56 @@ function pv_context_fields(string $root, string $relative, string $sort, string 
     }
 
     return $html;
+}
+
+/**
+ * php.ini の「2M」「512K」のような書き方を、バイト数に直す。
+ * 読めない値や上限なしのときは 0 を返す。
+ */
+function pv_ini_bytes(string $key): int
+{
+    $raw = trim((string) ini_get($key));
+
+    if ($raw === '' || $raw === '-1') {
+        return 0;
+    }
+
+    $unit  = strtolower(substr($raw, -1));
+    $value = (int) $raw;
+
+    switch ($unit) {
+        case 'g':
+            return $value * 1024 * 1024 * 1024;
+        case 'm':
+            return $value * 1024 * 1024;
+        case 'k':
+            return $value * 1024;
+        default:
+            return $value;
+    }
+}
+
+/**
+ * ファイルを切り分ける大きさを決める。
+ *
+ * config.php に書いた値をそのまま使うと、サーバーが1回で受け取れる大きさを
+ * 超えていたときに、どのファイルも最初のかけらで失敗してしまう。
+ * そうならないよう、php.ini の上限より小さくなるところまで下げる。
+ */
+function pv_upload_chunk_size(array $config): int
+{
+    $size = (int) ($config['upload_chunk_size'] ?? 4 * 1024 * 1024);
+
+    foreach (['upload_max_filesize', 'post_max_size'] as $key) {
+        $limit = pv_ini_bytes($key);
+
+        // かけら以外の項目もPOSTに入るので、上限いっぱいまでは使わない
+        if ($limit > 0) {
+            $size = min($size, (int) ($limit * 0.8));
+        }
+    }
+
+    return max(64 * 1024, $size);
 }
 
 /**

@@ -937,11 +937,17 @@ body[data-video-size="fit"] .lightbox.viewer .lb-video {
     margin: 0;
 }
 
-/* 「上のフォルダへ」は他の操作と役割が違うので、少し離して置く */
+/* 「上のフォルダへ」は他の操作と役割が違うので、少し離して置く。
+   名前を出さず矢印だけにしているので、左右の余白を詰めて正方形に近づける。
+   高さは行ボックス（親の文字の大きさ）で決まるため、他のボタンとそろったまま。 */
 .button.up {
+    padding: 7px 12px;
     margin-left: 12px;
     color: var(--accent);
 }
+
+/* 矢印1文字だけだと小さく見えるので、他のアイコンより少し大きくする */
+.button.up .button-icon { font-size: 17px; }
 
 .button-icon {
     font-size: 15px;
@@ -1601,3 +1607,220 @@ body[data-view="list"] .card:has(.thumb:focus-visible) {
         min-width: 0;
     }
 }
+
+/* ---- 初期設定（index.php?init）---- */
+
+.setup-badge {
+    padding: 3px 10px;
+    font-size: 13px;
+    color: var(--text-muted);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+}
+
+.setup-section {
+    max-width: 640px;
+    padding: 20px 22px;
+    margin: 10px 0 24px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    box-shadow: var(--shadow);
+}
+
+.setup-title {
+    margin: 0 0 12px;
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.setup-text {
+    margin: 0 0 10px;
+    font-size: 14px;
+    line-height: 1.7;
+    color: var(--text-muted);
+}
+
+.setup-text code {
+    padding: 1px 5px;
+    font-size: 13px;
+    background: var(--bg);
+    border-radius: 4px;
+}
+
+/* ルートごとの「◯フォルダ中 ◯件が未作成」。項目名と数を2列に並べる。 */
+.setup-status {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 6px 16px;
+    padding: 12px 14px;
+    margin: 16px 0;
+    font-size: 14px;
+    background: var(--bg);
+    border-radius: 8px;
+}
+
+.setup-status dt {
+    font-weight: 600;
+}
+
+.setup-status dd {
+    margin: 0;
+    color: var(--text-muted);
+}
+
+.setup-status strong {
+    color: var(--text);
+}
+
+.setup-note {
+    margin-left: 10px;
+    font-size: 13px;
+    color: var(--text-muted);
+}
+
+.setup-back {
+    font-size: 14px;
+}
+
+/* ---- ドラッグ＆ドロップで取り込む ---- */
+
+/* 外からファイルを持ち込んでいる間だけ、画面全体にかぶせる。
+   どこに落としても取り込めることを、覆いの大きさで伝える。 */
+.upload-drop {
+    position: fixed;
+    inset: 0;
+    z-index: 60;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    background: rgba(0, 0, 0, .45);
+
+    /* 覆い自身がドロップを横取りしないよう、当たり判定を持たせない */
+    pointer-events: none;
+}
+
+.upload-drop[hidden] { display: none; }
+
+.upload-drop-panel {
+    max-width: 90vw;
+    padding: 28px 36px;
+    text-align: center;
+    background: var(--panel);
+    border: 2px dashed var(--accent);
+    border-radius: 14px;
+    box-shadow: var(--shadow);
+}
+
+.upload-drop-icon {
+    display: block;
+    margin-bottom: 8px;
+    font-size: 32px;
+    line-height: 1;
+    color: var(--accent);
+}
+
+.upload-drop-title {
+    margin: 0 0 6px;
+    font-size: 17px;
+    font-weight: 600;
+}
+
+.upload-drop-note {
+    margin: 0;
+    font-size: 13px;
+    color: var(--text-muted);
+    word-break: break-all;
+}
+
+/* 取り込んでいる間の帯。画面の隅に出して、一覧の操作は妨げない。 */
+.upload-status {
+    position: fixed;
+    right: 20px;
+    bottom: 20px;
+    z-index: 55;
+    width: 340px;
+    max-width: calc(100vw - 40px);
+    padding: 14px 16px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, .18);
+}
+
+.upload-status[hidden] { display: none; }
+
+.upload-status-head {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    justify-content: space-between;
+}
+
+.upload-status-title {
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.upload-status-close {
+    flex-shrink: 0;
+    padding: 0 4px;
+    font-size: 18px;
+    line-height: 1;
+    color: var(--text-muted);
+    background: none;
+    border: 0;
+    cursor: pointer;
+}
+
+.upload-status-close:hover { color: var(--text); }
+
+/* ファイル名は長いことが多いので、1行に収めて後ろを省く */
+.upload-status-name {
+    margin: 6px 0 0;
+    overflow: hidden;
+    font-size: 13px;
+    color: var(--text-muted);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.upload-bar {
+    height: 6px;
+    margin-top: 10px;
+    overflow: hidden;
+    background: var(--bg);
+    border-radius: 999px;
+}
+
+.upload-bar[hidden] { display: none; }
+
+.upload-bar-fill {
+    display: block;
+    width: 0;
+    height: 100%;
+    background: var(--accent);
+    transition: width .15s linear;
+}
+
+/* 見送ったもの・失敗したものの知らせ。多いときはこの中だけを送る。 */
+.upload-notes {
+    max-height: 30vh;
+    margin: 10px 0 0;
+    overflow-y: auto;
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--text-muted);
+    list-style: none;
+    padding-left: 0;
+}
+
+.upload-notes[hidden] { display: none; }
+
+.upload-notes li {
+    padding-top: 6px;
+    word-break: break-all;
+}
+
+.upload-notes li + li { border-top: 1px solid var(--border); }

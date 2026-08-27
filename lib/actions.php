@@ -628,3 +628,69 @@ function pv_do_mkdir(array $config, string $parentRelative, string $name): array
 
     return ['ok' => true, 'message' => 'フォルダ「' . $name . '」を作りました。'];
 }
+
+/**
+ * 初期設定の「フォルダ情報を作成する」。
+ *
+ * 写真・動画それぞれのルート配下にあるフォルダを一通り見て、
+ * info.yml の無いところにだけ作る。すでにあるものには手を触れないので、
+ * 何度押しても、手で書いた内容が消えることはない。
+ *
+ * ルート自身（写真・動画のトップ）は対象にしない。フォルダ名がそのまま
+ * 見出しになってしまい、意味のある名前にならないため。
+ */
+function pv_do_init_info(array $config): array
+{
+    $created = 0;
+    $kept    = 0;
+    $failed  = 0;
+
+    foreach (array_keys($config['roots']) as $rootKey) {
+        $rootConfig = pv_apply_root($config, $rootKey);
+
+        foreach (pv_folder_tree($rootConfig['album_dir']) as $folder) {
+            if ($folder['path'] === '') {
+                continue;
+            }
+
+            $dir = pv_resolve_dir($rootConfig['album_dir'], $folder['path']);
+
+            if ($dir === null) {
+                continue;
+            }
+
+            if (file_exists($dir . '/' . PV_INFO_FILE)) {
+                $kept++;
+                continue;
+            }
+
+            if (pv_create_default_info($rootConfig, $folder['path'])) {
+                $created++;
+            } else {
+                $failed++;
+            }
+        }
+    }
+
+    if ($created === 0 && $kept === 0 && $failed === 0) {
+        return ['ok' => true, 'message' => '対象になるフォルダがありませんでした。'];
+    }
+
+    $parts = [];
+
+    if ($created > 0) {
+        $parts[] = 'フォルダ情報を ' . $created . ' 件作成しました。';
+    } else {
+        $parts[] = '新しく作るフォルダはありませんでした。';
+    }
+
+    if ($kept > 0) {
+        $parts[] = 'すでにあった ' . $kept . ' 件はそのままです。';
+    }
+
+    if ($failed > 0) {
+        $parts[] = $failed . ' 件は作成できませんでした。書き込み権限を確認してください。';
+    }
+
+    return ['ok' => $failed === 0, 'message' => implode(' ', $parts)];
+}

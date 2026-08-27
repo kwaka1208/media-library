@@ -107,6 +107,12 @@ switch ((string) ($_POST['action'] ?? '')) {
         );
         break;
 
+    case 'init-info':
+        // 初期設定の画面から実行する。終わったら一覧ではなく初期設定へ戻す。
+        $result = pv_do_init_info($config);
+        $back   = './?init';
+        break;
+
     default:
         $result = ['ok' => false, 'message' => '不明な操作です。'];
         break;

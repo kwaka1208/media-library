@@ -8,6 +8,14 @@ require __DIR__ . '/lib/functions.php';
 
 pv_session_start();
 
+// ---- 初期設定の画面 ----------------------------------------------
+// ?init を付けて開いたときは、一覧の代わりに初期設定の画面を出す。
+// ふだんの閲覧では通らないので、一覧のヘッダーからは辿れないようにしてある。
+if (isset($_GET['init'])) {
+    require __DIR__ . '/lib/init.php';
+    exit;
+}
+
 // ---- 表示するルート（写真／動画）--------------------------------
 // 以降の処理は、選んだルート1件だけを見ればよいようにしておく。
 $rootKey = pv_root_key($config, $_GET['root'] ?? null);
@@ -77,6 +85,11 @@ if ($dir !== null && $error === null) {
 
 // ---- フォルダに置かれた情報（info.yml）---------------------------
 // 開いているフォルダに info.yml があれば、その中身を一覧の横に出す。
+// まだ無いフォルダには、フォルダ名と先頭の画像で1つ作ってから読む。
+if ($dir !== null && $error === null) {
+    pv_create_default_info($config, $relative);
+}
+
 $info = $error === null ? pv_read_info($config, $relative) : null;
 
 // 編集画面でサムネイルに選べる画像。動画のフォルダでもサムネイルは画像なので、
@@ -175,7 +188,7 @@ if ($info !== null && $info['title'] !== '') {
 }
 ?>
 <title><?= h($pageName . ' | ' . $config['title']) ?></title>
-<link rel="stylesheet" href="assets/style.css?v=22">
+<link rel="stylesheet" href="assets/style.css?v=25">
 <style>:root { --thumb-size: <?= (int) $config['thumb_size'] ?>px; }</style>
 </head>
 <body data-video-muted="<?= h($videoMuted) ?>" data-video-size="<?= h($videoSize) ?>"
@@ -215,9 +228,11 @@ if ($info !== null && $info['title'] !== '') {
 
     <?php if ($parent !== null): ?>
         <div class="actions-bar">
+            <?php // 矢印だけのボタン。名前は吹き出しと読み上げに残す ?>
             <a class="button up" href="<?= h(pv_url(['path' => $parent] + $navArgs)) ?>"
+               title="上のフォルダへ" aria-label="上のフォルダへ"
                <?= $canEdit ? 'data-drop-path="' . h($parent) . '"' : '' ?>>
-                <span class="button-icon" aria-hidden="true">↩</span> 上のフォルダへ
+                <span class="button-icon" aria-hidden="true">↑</span>
             </a>
         </div>
     <?php endif; ?>
@@ -791,6 +806,42 @@ if ($error === null) {
 </div>
 <?php endif; ?>
 
+<?php if ($canEdit): ?>
+<?php // ドラッグ＆ドロップで取り込む。落とす場所は画面全体で、
+      // いま開いているフォルダに入る。設定値は app.js がここから読む。 ?>
+<div class="upload-drop" id="uploadDrop" hidden
+     data-token="<?= h($token) ?>"
+     data-root="<?= h($rootKey) ?>"
+     data-dir="<?= h($relative) ?>"
+     data-chunk="<?= (int) pv_upload_chunk_size($config) ?>"
+     data-extensions="<?= h(implode(',', $extensions)) ?>">
+    <div class="upload-drop-panel">
+        <span class="upload-drop-icon" aria-hidden="true">↓</span>
+        <p class="upload-drop-title">ここに落として取り込む</p>
+        <p class="upload-drop-note">
+            取り込み先： <?= h($relative === '' ? $rootLabel : $relative) ?>
+        </p>
+    </div>
+</div>
+
+<?php // 取り込んでいる間ずっと出しておく帯。終わったら結果に変わる。 ?>
+<div class="upload-status" id="uploadStatus" hidden aria-live="polite">
+    <div class="upload-status-head">
+        <span class="upload-status-title" data-upload-title></span>
+        <button type="button" class="upload-status-close" data-upload-close
+                hidden aria-label="閉じる">×</button>
+    </div>
+
+    <p class="upload-status-name" data-upload-name></p>
+
+    <div class="upload-bar" data-upload-track>
+        <span class="upload-bar-fill" data-upload-bar></span>
+    </div>
+
+    <ul class="upload-notes" data-upload-notes hidden></ul>
+</div>
+<?php endif; ?>
+
 <!-- 設定。サーバーには送らず、このブラウザに覚えさせるだけの内容。 -->
 <div class="modal" id="settingsModal" hidden>
     <div class="modal-panel">
@@ -883,6 +934,6 @@ if ($error === null) {
     </figure>
 </div>
 
-<script src="assets/app.js?v=22"></script>
+<script src="assets/app.js?v=25"></script>
 </body>
 </html>

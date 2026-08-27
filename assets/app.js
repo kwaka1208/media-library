@@ -1753,6 +1753,389 @@
         }, true);
     }
 
+    // ---- ドラッグ＆ドロップで取り込む --------------------------------
+    // 画面のどこに落としても、いま開いているフォルダに入る。
+    // フォルダごと落としたときは、中の構成をそのまま作り直す。
+    //
+    // 大きな動画でも上げられるよう、ファイルは小さく切って順に送り、
+    // サーバー側（upload.php）で継ぎ足してもらう。1回のリクエストが
+    // 小さいままなら、共有サーバーの upload_max_filesize などに届かない。
+
+    var uploadDrop = document.getElementById('uploadDrop');
+    var uploadStatus = document.getElementById('uploadStatus');
+
+    // 閲覧専用のときは要素ごと置いていない。古いブラウザでは何もしない。
+    if (uploadDrop && window.FormData && window.File && File.prototype.slice) {
+        var upConfig = {
+            token: uploadDrop.dataset.token,
+            root: uploadDrop.dataset.root,
+            dir: uploadDrop.dataset.dir,
+            chunk: parseInt(uploadDrop.dataset.chunk, 10) || 1048576,
+            extensions: (uploadDrop.dataset.extensions || '').split(',').filter(Boolean)
+        };
+
+        var upTitle = uploadStatus.querySelector('[data-upload-title]');
+        var upName = uploadStatus.querySelector('[data-upload-name]');
+        var upBar = uploadStatus.querySelector('[data-upload-bar]');
+        var upTrack = uploadStatus.querySelector('[data-upload-track]');
+        var upNotes = uploadStatus.querySelector('[data-upload-notes]');
+        var upClose = uploadStatus.querySelector('[data-upload-close]');
+
+        // 送っている最中は、次のドロップを受け付けない
+        var upBusy = false;
+
+        // dragenter / dragleave は入れ子の要素でも起きるので、
+        // 出入りの数を数えて、本当に画面から出たときだけ隠す。
+        var upDepth = 0;
+
+        // ---- 送るものを組み立てる ------------------------------------
+
+        function upExtensionOf(name) {
+            var dot = name.lastIndexOf('.');
+
+            return dot < 0 ? '' : name.slice(dot + 1).toLowerCase();
+        }
+
+        function upAccepted(name) {
+            return upConfig.extensions.indexOf(upExtensionOf(name)) >= 0;
+        }
+
+        function upRandomId() {
+            var bytes = new Uint8Array(16);
+
+            if (window.crypto && window.crypto.getRandomValues) {
+                window.crypto.getRandomValues(bytes);
+            } else {
+                for (var i = 0; i < bytes.length; i++) {
+                    bytes[i] = Math.floor(Math.random() * 256);
+                }
+            }
+
+            return Array.prototype.map.call(bytes, function (one) {
+                return ('0' + one.toString(16)).slice(-2);
+            }).join('');
+        }
+
+        function upFlatten(lists) {
+            return lists.reduce(function (all, one) {
+                return all.concat(one);
+            }, []);
+        }
+
+        // フォルダの中身を読む。readEntries は一度に全部返すとは限らないので、
+        // 空が返るまで呼び続ける決まりになっている。
+        function upReadAll(reader) {
+            return new Promise(function (resolve) {
+                var found = [];
+
+                function step() {
+                    reader.readEntries(function (batch) {
+                        if (batch.length === 0) {
+                            resolve(found);
+                            return;
+                        }
+
+                        found = found.concat(batch);
+                        step();
+                    }, function () {
+                        resolve(found);
+                    });
+                }
+
+                step();
+            });
+        }
+
+        // 落とされたものを { file, sub } の並びにする。
+        // sub は落とした先から見た入れ子のフォルダで、ファイル単体なら空。
+        function upWalk(entry, sub) {
+            if (entry.isFile) {
+                return new Promise(function (resolve) {
+                    entry.file(function (file) {
+                        resolve([{ file: file, sub: sub }]);
+                    }, function () {
+                        resolve([]);
+                    });
+                });
+            }
+
+            if (!entry.isDirectory) {
+                return Promise.resolve([]);
+            }
+
+            var child = sub === '' ? entry.name : sub + '/' + entry.name;
+
+            return upReadAll(entry.createReader()).then(function (children) {
+                return Promise.all(children.map(function (one) {
+                    return upWalk(one, child);
+                })).then(upFlatten);
+            });
+        }
+
+        function upCollect(transfer) {
+            var items = transfer.items;
+            var entries = [];
+
+            if (items && items.length && typeof items[0].webkitGetAsEntry === 'function') {
+                for (var i = 0; i < items.length; i++) {
+                    var entry = items[i].webkitGetAsEntry();
+
+                    if (entry) {
+                        entries.push(entry);
+                    }
+                }
+            }
+
+            // フォルダをたどれないブラウザでは、ファイルだけを受け取る
+            if (entries.length === 0) {
+                var plain = [];
+
+                for (var j = 0; j < transfer.files.length; j++) {
+                    plain.push({ file: transfer.files[j], sub: '' });
+                }
+
+                return Promise.resolve(plain);
+            }
+
+            return Promise.all(entries.map(function (entry) {
+                return upWalk(entry, '');
+            })).then(upFlatten);
+        }
+
+        // ---- 送る ----------------------------------------------------
+
+        // 1つのファイルを、かけらに切って順に送る。
+        // onProgress には 0〜1 の進み具合が渡る。
+        function upSend(item, onProgress) {
+            var file = item.file;
+            var total = Math.max(1, Math.ceil(file.size / upConfig.chunk));
+            var id = upRandomId();
+            var index = 0;
+
+            function step() {
+                var start = index * upConfig.chunk;
+                var body = new FormData();
+
+                body.append('token', upConfig.token);
+                body.append('root', upConfig.root);
+                body.append('dir', upConfig.dir);
+                body.append('id', id);
+                body.append('index', String(index));
+                body.append('total', String(total));
+                body.append('name', file.name);
+                body.append('sub', item.sub);
+                body.append('chunk', file.slice(start, start + upConfig.chunk));
+
+                return fetch('upload.php', {
+                    method: 'POST',
+                    body: body,
+                    credentials: 'same-origin'
+                }).then(function (response) {
+                    return response.json().catch(function () {
+                        throw new Error('サーバーから読み取れる返事がありませんでした。');
+                    });
+                }).then(function (result) {
+                    if (!result.ok) {
+                        throw new Error(result.message || '取り込めませんでした。');
+                    }
+
+                    index++;
+                    onProgress(index / total);
+
+                    return index < total ? step() : result;
+                });
+            }
+
+            return step();
+        }
+
+        // ---- 進み具合の表示 ------------------------------------------
+
+        function upSetBar(ratio) {
+            var percent = Math.round(Math.max(0, Math.min(1, ratio)) * 100);
+
+            upBar.style.width = percent + '%';
+            upTrack.setAttribute('aria-valuenow', String(percent));
+        }
+
+        function upNote(text) {
+            var line = document.createElement('li');
+
+            line.textContent = text;
+            upNotes.appendChild(line);
+            upNotes.hidden = false;
+        }
+
+        function upStart(count) {
+            upBusy = true;
+            upNotes.textContent = '';
+            upNotes.hidden = true;
+            upClose.hidden = true;
+            upTrack.hidden = false;
+            uploadStatus.hidden = false;
+            uploadStatus.classList.remove('done');
+            upTitle.textContent = '取り込んでいます（全 ' + count + ' 件）';
+            upSetBar(0);
+        }
+
+        // 終わったときの表示。うまくいっただけなら、そのまま読み込み直して
+        // 取り込んだものを一覧に出す。伝えることがあるときは、
+        // 読んでもらってから閉じる（閉じたときに読み込み直す）。
+        function upFinish(saved, quiet) {
+            upBusy = false;
+            upTrack.hidden = true;
+            upName.textContent = '';
+
+            if (saved > 0 && quiet) {
+                upTitle.textContent = '取り込みました。読み込み直しています…';
+                window.location.reload();
+                return;
+            }
+
+            uploadStatus.classList.add('done');
+            upTitle.textContent = saved > 0
+                ? saved + ' 件を取り込みました'
+                : '取り込めたものはありません';
+            upClose.hidden = false;
+            upClose.focus();
+        }
+
+        upClose.addEventListener('click', function () {
+            uploadStatus.hidden = true;
+            window.location.reload();
+        });
+
+        // ---- 順に送る ------------------------------------------------
+
+        function upRun(items) {
+            // 表示できない種類は、送る前に外しておく
+            var skipped = [];
+
+            var queue = items.filter(function (item) {
+                if (upAccepted(item.file.name)) {
+                    return true;
+                }
+
+                skipped.push(item.file.name);
+
+                return false;
+            });
+
+            if (items.length === 0) {
+                return;
+            }
+
+            upStart(queue.length);
+
+            var saved = 0;
+            var failed = 0;
+            var renamed = 0;
+            var count = queue.length;
+
+            skipped.forEach(function (name) {
+                upNote('「' + name + '」は取り込める種類ではないので見送りました。');
+            });
+
+            function next() {
+                if (queue.length === 0) {
+                    if (renamed > 0) {
+                        upNote(renamed + ' 件は同じ名前があったため、番号を付けて取り込みました。');
+                    }
+
+                    upFinish(saved, skipped.length === 0 && failed === 0 && renamed === 0);
+                    return;
+                }
+
+                var item = queue.shift();
+                var done = count - queue.length;
+                var label = item.sub === '' ? item.file.name : item.sub + '/' + item.file.name;
+
+                upName.textContent = done + ' / ' + count + '　' + label;
+                upSetBar(0);
+
+                upSend(item, upSetBar).then(function (result) {
+                    saved++;
+
+                    if (result.renamed) {
+                        renamed++;
+                    }
+                }).catch(function (error) {
+                    failed++;
+                    upNote('「' + label + '」: ' + error.message);
+                }).then(next);
+            }
+
+            next();
+        }
+
+        // ---- 落とす場所 ----------------------------------------------
+
+        // 内側のドラッグ（並べ替え・移動）と見分ける。
+        // 外から持ち込まれたものだけ Files が入っている。
+        function upHasFiles(event) {
+            var types = event.dataTransfer && event.dataTransfer.types;
+
+            return !!types && Array.prototype.indexOf.call(types, 'Files') >= 0;
+        }
+
+        document.addEventListener('dragenter', function (event) {
+            if (!upHasFiles(event) || upBusy) {
+                return;
+            }
+
+            upDepth++;
+            uploadDrop.hidden = false;
+        });
+
+        document.addEventListener('dragover', function (event) {
+            if (!upHasFiles(event) || upBusy) {
+                return;
+            }
+
+            // ここで止めておかないと、ブラウザがそのファイルを開いてしまう
+            event.preventDefault();
+            event.dataTransfer.dropEffect = 'copy';
+        });
+
+        document.addEventListener('dragleave', function (event) {
+            if (!upHasFiles(event)) {
+                return;
+            }
+
+            upDepth--;
+
+            if (upDepth <= 0) {
+                upDepth = 0;
+                uploadDrop.hidden = true;
+            }
+        });
+
+        document.addEventListener('drop', function (event) {
+            if (!upHasFiles(event)) {
+                return;
+            }
+
+            event.preventDefault();
+
+            upDepth = 0;
+            uploadDrop.hidden = true;
+
+            if (upBusy) {
+                return;
+            }
+
+            upCollect(event.dataTransfer).then(upRun);
+        });
+
+        // 送っている途中で閉じられると、中途半端なものが残る
+        window.addEventListener('beforeunload', function (event) {
+            if (upBusy) {
+                event.preventDefault();
+                event.returnValue = '';
+            }
+        });
+    }
+
     // ---- ライトボックス --------------------------------------------
 
     var thumbs = Array.prototype.slice.call(document.querySelectorAll('.thumb'));
