@@ -10,7 +10,6 @@
 
     if (form) {
         var searchInput = form.querySelector('input[type="search"]');
-        var timer = null;
 
         form.querySelectorAll('select[data-autosubmit]').forEach(function (select) {
             select.addEventListener('change', function () {
@@ -19,20 +18,13 @@
         });
 
         if (searchInput) {
-            // 入力が止まってから送信する（1文字ごとのリロードを避ける）
-            searchInput.addEventListener('input', function () {
-                window.clearTimeout(timer);
-                timer = window.setTimeout(function () {
-                    sessionStorage.setItem('pv-focus-search', '1');
-                    form.submit();
-                }, 400);
-            });
-
-            // Enterでの送信時はタイマーを止めて二重送信を防ぐ
+            // Enterを押したときだけ送信する。
+            // 1文字ごとに読み込み直すと、打っている途中で一覧が変わってしまうため。
             searchInput.addEventListener('keydown', function (event) {
                 if (event.key === 'Enter') {
-                    window.clearTimeout(timer);
+                    event.preventDefault();
                     sessionStorage.setItem('pv-focus-search', '1');
+                    form.submit();
                 }
             });
 
@@ -575,7 +567,7 @@
         }
 
         if (target.closest('.card, .folder-item, a, button, input, select, ' +
-                'textarea, label, .selection-bar, .page-header, .pagination, ' +
+                'textarea, label, .side, .selection-bar, .page-header, .pagination, ' +
                 '.modal, .context-menu, .lightbox, .props-view')) {
             return false;
         }

@@ -247,7 +247,7 @@ if ($info !== null && $info['title'] !== '') {
         <label class="field search">
             <span class="visually-hidden">ファイル名で絞り込み</span>
             <input type="search" name="q" value="<?= h($keyword) ?>"
-                   placeholder="ファイル名で絞り込み" autocomplete="off" data-autosubmit>
+                   placeholder="ファイル名で絞り込み（Enter）" autocomplete="off">
         </label>
 
         <label class="field">
