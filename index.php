@@ -94,19 +94,16 @@ if ($dir !== null && $error === null) {
 
 $info = $error === null ? pv_read_info($config, $relative) : null;
 
-// 編集画面でサムネイルに選べる画像。動画のフォルダでもサムネイルは画像なので、
-// いま開いているルートの拡張子ではなく、画像の拡張子で数え直す。
-// 枚数が多いフォルダで編集画面が重くならないよう、先頭から上限までにする。
-$infoImages    = [];
-$infoImagesCut = false;
+// ---- ピン留め ----------------------------------------------------
+// info.json の pinned に並べた名前を、表示に使う形にする。
+// 名前を変えたあとなど、実体が無くなったものはここで落ちる。
+$pins = $info === null ? [] : pv_pinned_entries($config, $relative, $info['pinned']);
 
-if ($dir !== null && $error === null) {
-    $infoImages = pv_sort(pv_scan($dir, pv_image_extensions($config))['files'], 'name', 'asc');
+// ピン留めされている名前。一覧に付ける印と、右クリックメニューの出し分けに使う。
+$pinnedNames = [];
 
-    if (count($infoImages) > 200) {
-        $infoImages    = array_slice($infoImages, 0, 200);
-        $infoImagesCut = true;
-    }
+foreach ($pins as $pin) {
+    $pinnedNames[$pin['name']] = true;
 }
 
 // ---- 操作機能が使えるかどうか ------------------------------------
@@ -191,7 +188,7 @@ if ($info !== null && $info['title'] !== '') {
 }
 ?>
 <title><?= h($pageName . ' | ' . $config['title']) ?></title>
-<link rel="stylesheet" href="assets/style.css?v=25">
+<link rel="stylesheet" href="assets/style.css?v=26">
 <style>:root { --thumb-size: <?= (int) $config['thumb_size'] ?>px; }</style>
 </head>
 <body data-video-muted="<?= h($videoMuted) ?>" data-video-size="<?= h($videoSize) ?>"
@@ -412,6 +409,56 @@ if ($error === null) {
     <?php endif; ?>
 </aside>
 
+<?php if ($pins !== []): ?>
+<?php // ピン留め。フォルダ情報の下に並べる。
+      // 写真・動画は押すと拡大表示、フォルダは押すとそのフォルダを開く。 ?>
+<section class="pin-panel" aria-label="ピン留め">
+    <h2 class="pin-heading">
+        <span class="pin-mark" aria-hidden="true">📌</span> ピン留め
+    </h2>
+
+    <ul class="pin-list">
+        <?php foreach ($pins as $pin): ?>
+            <li class="pin-item">
+                <?php if ($pin['type'] === 'dir'): ?>
+                    <a class="pin-link" href="<?= h(pv_url(['path' => $pin['path']] + $navArgs)) ?>"
+                       title="<?= h($pin['name']) ?>">
+                        <span class="pin-box">
+                            <?php if ($pin['thumb'] !== null): ?>
+                                <img src="<?= h($pin['thumb']) ?>" alt="" loading="lazy" decoding="async">
+                            <?php else: ?>
+                                <span class="pin-icon" aria-hidden="true">📁</span>
+                            <?php endif; ?>
+                        </span>
+                        <span class="pin-name"><?= h($pin['label']) ?></span>
+                    </a>
+                <?php else: ?>
+                    <?php // 一覧のサムネイルと同じ道具立て。拡大表示は app.js が受け持つ。 ?>
+                    <a class="pin-link pin-thumb" href="<?= h($pin['url']) ?>"
+                       data-kind="<?= h($pin['kind']) ?>"
+                       data-name="<?= h($pin['name']) ?>"
+                       data-meta="<?= h(pv_human_size((int) $pin['size']) . ' / ' . date('Y-m-d H:i', (int) $pin['mtime'])) ?>"
+                       title="<?= h($pin['name']) ?>">
+                        <span class="pin-box">
+                            <?php if ($pin['kind'] === 'video'): ?>
+                                <video src="<?= h($pin['url']) ?>#t=0.1" preload="metadata"
+                                       muted playsinline tabindex="-1"
+                                       aria-label="<?= h($pin['name']) ?>"></video>
+                                <span class="pin-play" aria-hidden="true">▶</span>
+                            <?php else: ?>
+                                <img src="<?= h($pin['url']) ?>" alt="<?= h($pin['name']) ?>"
+                                     loading="lazy" decoding="async">
+                            <?php endif; ?>
+                        </span>
+                        <span class="pin-name"><?= h($pin['label']) ?></span>
+                    </a>
+                <?php endif; ?>
+            </li>
+        <?php endforeach; ?>
+    </ul>
+</section>
+<?php endif; ?>
+
 <?= $listingBar ?>
 </div><!-- /.side -->
 <?php endif; ?>
@@ -441,8 +488,10 @@ if ($error === null) {
             <?php $label = ($childInfo !== null && $childInfo['title'] !== '')
                 ? $childInfo['title']
                 : $item['name']; ?>
-            <li class="folder-item"<?= $canEdit ? ' draggable="true"' : '' ?>
-                data-type="dir" data-path="<?= h($childPath) ?>" data-name="<?= h($item['name']) ?>">
+            <?php $pinnedHere = isset($pinnedNames[$item['name']]); ?>
+            <li class="folder-item<?= $pinnedHere ? ' pinned' : '' ?>"<?= $canEdit ? ' draggable="true"' : '' ?>
+                data-type="dir" data-path="<?= h($childPath) ?>" data-name="<?= h($item['name']) ?>"
+                <?= $pinnedHere ? 'data-pinned="1"' : '' ?>>
                 <?php if ($canEdit): ?>
                     <label class="select-box">
                         <span class="visually-hidden"><?= h($item['name']) ?> を選ぶ</span>
@@ -451,6 +500,9 @@ if ($error === null) {
                 <?php endif; ?>
                 <a class="folder<?= $childInfo !== null ? ' has-info' : '' ?>"
                    href="<?= h(pv_url(['path' => $childPath] + $navArgs)) ?>">
+                    <?php if ($pinnedHere): ?>
+                        <span class="pin-tag" title="ピン留めしています">📌</span>
+                    <?php endif; ?>
                     <span class="folder-icon" aria-hidden="true">📁</span>
                     <span class="folder-name" title="<?= h($item['name']) ?>"><?= h($label) ?></span>
                     <span class="folder-count"><?= (int) $item['count'] ?></span>
@@ -477,12 +529,14 @@ if ($error === null) {
         <?php $src = pv_image_url($baseUrl, $relative, $item['name']); ?>
         <?php $filePath = $relative === '' ? $item['name'] : $relative . '/' . $item['name']; ?>
         <?php $isVideo = pv_is_video($config, $item['name']); ?>
-        <figure class="card<?= $isVideo ? ' video' : '' ?>"<?= $canEdit ? ' draggable="true"' : '' ?>
+        <?php $pinnedHere = isset($pinnedNames[$item['name']]); ?>
+        <figure class="card<?= $isVideo ? ' video' : '' ?><?= $pinnedHere ? ' pinned' : '' ?>"<?= $canEdit ? ' draggable="true"' : '' ?>
                 data-type="file" data-kind="<?= $isVideo ? 'video' : 'image' ?>"
                 data-path="<?= h($filePath) ?>"
                 data-name="<?= h($item['name']) ?>" data-src="<?= h($src) ?>"
                 data-size="<?= h(pv_human_size((int) $item['size'])) ?>"
-                data-date="<?= h(date('Y-m-d H:i', (int) $item['mtime'])) ?>">
+                data-date="<?= h(date('Y-m-d H:i', (int) $item['mtime'])) ?>"
+                <?= $pinnedHere ? 'data-pinned="1"' : '' ?>>
             <?php if ($canEdit): ?>
                 <label class="select-box">
                     <span class="visually-hidden"><?= h($item['name']) ?> を選ぶ</span>
@@ -504,6 +558,9 @@ if ($error === null) {
                     <img src="<?= h($src) ?>" alt="<?= h($item['name']) ?>" loading="lazy" decoding="async">
                 <?php endif; ?>
             </a>
+            <?php if ($pinnedHere): ?>
+                <span class="pin-tag" title="ピン留めしています">📌</span>
+            <?php endif; ?>
             <figcaption class="caption">
                 <span class="file-name" title="<?= h($item['name']) ?>"><?= h($item['name']) ?></span>
                 <span class="file-meta"><?= h(pv_human_size((int) $item['size'])) ?> ・ <?= date('Y-m-d', (int) $item['mtime']) ?></span>
@@ -525,6 +582,8 @@ if ($error === null) {
     <?php if ($canEdit): ?>
         <button type="button" class="context-item" data-menu="rename">名前を変更</button>
         <button type="button" class="context-item" data-menu="move">移動</button>
+        <button type="button" class="context-item" data-menu="pin">ピン留め</button>
+        <button type="button" class="context-item" data-menu="unpin">ピン留めを外す</button>
         <button type="button" class="context-item" data-menu="download">ダウンロード</button>
         <button type="button" class="context-item danger" data-menu="delete">ゴミ箱へ移動</button>
         <button type="button" class="context-item" data-menu="select">複数選択</button>
@@ -636,18 +695,28 @@ if ($error === null) {
         </label>
 
         <?php
-        // いま選ばれているサムネイル。random のときは、選び直せるよう合図の文字を入れておく。
-        $infoThumbName = '';
+        // いま選ばれているサムネイル。
+        //   none   … サムネイルなし
+        //   random … 開くたびに選び直す
+        //   pick   … 画像を1枚選んである（$infoPickPath はルートからの道順）
+        $infoThumbMode = 'none';
+        $infoPickPath  = '';
+        $infoPickUrl   = '';
+
         if ($info !== null && $info['thumb'] !== null) {
-            $infoThumbName = $info['thumb']['random']
-                ? PV_INFO_RANDOM
-                : basename($info['thumb']['path']);
+            if ($info['thumb']['random']) {
+                $infoThumbMode = 'random';
+            } else {
+                $infoThumbMode = 'pick';
+                $infoPickPath  = $info['thumb']['path'];
+                $infoPickUrl   = $info['thumb']['url'];
+            }
         }
 
         // ランダムに選ぶ範囲。'self' はこのフォルダ以下、'root:<パス>' はそのフォルダ以下。
         // フォルダ名を変えても壊れないよう、このフォルダ以下は 'self' のままにしておく。
         $infoRandomFrom = 'self';
-        if ($infoThumbName === PV_INFO_RANDOM && $info['thumb']['randomFrom'] !== null) {
+        if ($infoThumbMode === 'random' && $info['thumb']['randomFrom'] !== null) {
             $infoRandomFrom = 'root:' . $info['thumb']['randomFrom'];
         }
         ?>
@@ -655,42 +724,50 @@ if ($error === null) {
         <fieldset class="modal-choice">
             <legend class="modal-label">サムネイル</legend>
 
-            <div class="thumb-picker">
-                <label class="thumb-pick">
-                    <input type="radio" name="thumbnail" value=""
-                           <?= $infoThumbName === '' ? 'checked' : '' ?>>
-                    <span class="thumb-pick-box">なし</span>
-                </label>
+            <label class="choice">
+                <input type="radio" name="thumbnail" value=""
+                       <?= $infoThumbMode === 'none' ? 'checked' : '' ?>>
+                <span class="choice-text">なし</span>
+            </label>
 
-                <label class="thumb-pick">
-                    <input type="radio" name="thumbnail" value="<?= h(PV_INFO_RANDOM) ?>"
-                           <?= $infoThumbName === PV_INFO_RANDOM ? 'checked' : '' ?>>
-                    <span class="thumb-pick-box">ランダム</span>
-                    <span class="thumb-pick-name">開くたびに変わります</span>
-                </label>
+            <label class="choice">
+                <input type="radio" name="thumbnail" value="<?= h(PV_INFO_RANDOM) ?>"
+                       <?= $infoThumbMode === 'random' ? 'checked' : '' ?>>
+                <span class="choice-text">ランダム
+                    <span class="choice-note">開くたびに変わります</span>
+                </span>
+            </label>
 
-                <?php foreach ($infoImages as $image): ?>
-                    <label class="thumb-pick">
-                        <input type="radio" name="thumbnail" value="<?= h($image['name']) ?>"
-                               <?= $infoThumbName === $image['name'] ? 'checked' : '' ?>>
-                        <span class="thumb-pick-box">
-                            <img src="<?= h(pv_image_url($baseUrl, $relative, $image['name'])) ?>"
-                                 alt="" loading="lazy" decoding="async">
-                        </span>
-                        <span class="thumb-pick-name" title="<?= h($image['name']) ?>"><?= h($image['name']) ?></span>
-                    </label>
-                <?php endforeach; ?>
+            <?php // 選んだ1枚。まだ選んでいないあいだは、押せないようにしておく
+                  // （選ばせる前に選択できてしまうと、「なし」と区別が付かないため）。 ?>
+            <label class="choice">
+                <input type="radio" name="thumbnail" data-thumb-pick
+                       value="<?= h($infoPickPath) ?>"
+                       <?= $infoThumbMode === 'pick' ? 'checked' : 'disabled' ?>>
+                <span class="choice-text">選んだ画像
+                    <span class="choice-note" data-thumb-label><?= $infoThumbMode === 'pick'
+                        ? h($infoPickPath)
+                        : '「画像を選ぶ」から1枚選びます' ?></span>
+                </span>
+            </label>
+
+            <div class="thumb-chosen">
+                <span class="thumb-chosen-box" data-thumb-preview>
+                    <?php if ($infoThumbMode === 'pick'): ?>
+                        <img src="<?= h($infoPickUrl) ?>" alt="" loading="lazy" decoding="async">
+                    <?php endif; ?>
+                </span>
+                <button type="button" class="button" data-act="thumb-browse">画像を選ぶ…</button>
             </div>
 
-            <?php if ($infoImages === []): ?>
-                <p class="modal-note">このフォルダに画像がないため、選べるサムネイルはありません。</p>
-            <?php elseif ($infoImagesCut): ?>
-                <p class="modal-note">画像が多いため、名前順の先頭 200 枚だけを並べています。</p>
-            <?php endif; ?>
+            <p class="modal-note">
+                「画像を選ぶ」では、<?= h($rootLabel) ?>フォルダの中をたどって、
+                どのフォルダの画像でも選べます。
+            </p>
 
             <?php // 「ランダム」を選んだときだけ出す。切り替えは app.js が行う。 ?>
             <label class="modal-field random-from" data-random-from
-                   <?= $infoThumbName === PV_INFO_RANDOM ? '' : 'hidden' ?>>
+                   <?= $infoThumbMode === 'random' ? '' : 'hidden' ?>>
                 <span class="modal-label">ランダムに選ぶ範囲</span>
                 <select name="random_from">
                     <option value="self"<?= $infoRandomFrom === 'self' ? ' selected' : '' ?>>
@@ -754,6 +831,39 @@ if ($error === null) {
         </div>
     </form>
 </div>
+
+<!-- サムネイルに使う画像を選ぶ。フォルダ情報の画面の上に重ねて出し、
+     フォルダをたどって、どのフォルダの画像でも選べるようにする。
+     中身は browse.php から受け取って app.js が組み立てる。 -->
+<div class="modal browse-modal" id="browseModal" hidden
+     data-root="<?= h($rootKey) ?>" data-start="<?= h($relative) ?>">
+    <div class="modal-panel wide">
+        <h2 class="modal-title">画像を選ぶ</h2>
+
+        <nav class="browse-crumbs" data-browse-crumbs aria-label="いま見ているフォルダ"></nav>
+
+        <div class="browse-body">
+            <p class="browse-message" data-browse-message hidden></p>
+            <ul class="browse-folders" data-browse-folders></ul>
+            <div class="browse-images" data-browse-images></div>
+        </div>
+
+        <p class="modal-note">画像を押すと、その1枚をサムネイルにします。</p>
+
+        <div class="modal-actions">
+            <button type="button" class="button" data-browse-close>キャンセル</button>
+        </div>
+    </div>
+</div>
+
+<?php // ピン留め。右クリックメニューから、確認を挟まずにそのまま送る。 ?>
+<form class="pin-form" id="pinForm" method="post" action="action.php" hidden>
+    <input type="hidden" name="token" value="<?= h($token) ?>">
+    <input type="hidden" name="action" value="pin">
+    <input type="hidden" name="pin" value="1">
+    <span data-paths hidden></span>
+    <?= pv_context_fields($rootKey, $relative, $sort, $order, $keyword, $page) ?>
+</form>
 
 <div class="modal" id="mkdirModal" hidden>
     <form class="modal-panel" method="post" action="action.php">
@@ -930,6 +1040,6 @@ if ($error === null) {
     </figure>
 </div>
 
-<script src="assets/app.js?v=25"></script>
+<script src="assets/app.js?v=26"></script>
 </body>
 </html>

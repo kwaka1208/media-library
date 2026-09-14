@@ -120,7 +120,8 @@
             name: element.dataset.name || '',
             src: element.dataset.src || '',
             kind: element.dataset.kind || 'image',
-            isFolder: element.dataset.type === 'dir'
+            isFolder: element.dataset.type === 'dir',
+            pinned: element.dataset.pinned === '1'
         };
     }
 
@@ -264,6 +265,20 @@
         input.focus();
     }
 
+    // ピン留めは確認を挟まず、そのまま送って画面を読み込み直す。
+    // 押し間違えても、もう一度押せば元に戻せる操作なので、一手で済ませる。
+    function submitPin(items, on) {
+        var form = document.getElementById('pinForm');
+
+        if (!form || items.length === 0) {
+            return;
+        }
+
+        setPaths(form, items);
+        form.elements.pin.value = on ? '1' : '0';
+        form.submit();
+    }
+
     // ---- フォルダ情報（info.json）の編集 ------------------------------
 
     var infoModal = document.getElementById('infoModal');
@@ -304,6 +319,20 @@
         row.querySelector('input').focus();
     }
 
+    // サムネイルに選んだ1枚。ラジオの value には、写真（動画）フォルダから見た
+    // 道順が入る。値が空のあいだは選べないようにしておく（「なし」と区別が付かないため）。
+    var thumbPick    = infoModal ? infoModal.querySelector('[data-thumb-pick]') : null;
+    var thumbLabel   = infoModal ? infoModal.querySelector('[data-thumb-label]') : null;
+    var thumbPreview = infoModal ? infoModal.querySelector('[data-thumb-preview]') : null;
+
+    // 開き直したときに選びかけが残らないよう、画面を読み込んだ時点の内容を控えておく
+    var thumbStart = thumbPick ? {
+        value: thumbPick.value,
+        disabled: thumbPick.disabled,
+        label: thumbLabel ? thumbLabel.textContent : '',
+        preview: thumbPreview ? thumbPreview.innerHTML : ''
+    } : null;
+
     // 「ランダム」を選んだときだけ、選ぶ範囲を出す。
     // ほかを選んでいるあいだ出しておくと、効かない設定に見えてしまうため。
     var randomFrom = infoModal ? infoModal.querySelector('[data-random-from]') : null;
@@ -322,6 +351,293 @@
         infoModal.addEventListener('change', function (event) {
             if (event.target.name === 'thumbnail') {
                 updateRandomFrom();
+            }
+        });
+    }
+
+    // ---- サムネイルに使う画像を、フォルダをたどって選ぶ ----------------
+    //
+    // フォルダ情報の画面の上に重ねて出す。開いているあいだも、下の画面の
+    // 書きかけはそのまま残る。中身は browse.php から受け取って組み立てる。
+    // ファイル名をそのまま流し込まないよう、DOMを組んで文字として入れる。
+
+    var browseModal   = document.getElementById('browseModal');
+    var browseCrumbs  = browseModal ? browseModal.querySelector('[data-browse-crumbs]') : null;
+    var browseFolders = browseModal ? browseModal.querySelector('[data-browse-folders]') : null;
+    var browseImages  = browseModal ? browseModal.querySelector('[data-browse-images]') : null;
+    var browseNote    = browseModal ? browseModal.querySelector('[data-browse-message]') : null;
+
+    // ブラウズを開いたボタン。閉じたときにフォーカスを戻すために控えておく。
+    var browseOpener = null;
+
+    // 読み込みが終わる前に続けて押されても、あとから届いた中身で
+    // 上書きされないようにする
+    var browseBusy = false;
+
+    function browseElement(tag, className, text) {
+        var node = document.createElement(tag);
+
+        if (className) {
+            node.className = className;
+        }
+
+        if (text !== undefined && text !== null) {
+            node.textContent = text;
+        }
+
+        return node;
+    }
+
+    function browseSay(text) {
+        if (!browseNote) {
+            return;
+        }
+
+        browseNote.textContent = text || '';
+        browseNote.hidden = !text;
+    }
+
+    // フォルダの行。押すとそのフォルダを開く。
+    function browseFolderRow(name, path, icon, count) {
+        var row = browseElement('li', 'browse-folder-item');
+        var button = browseElement('button', 'browse-folder');
+
+        button.type = 'button';
+        button.dataset.browsePath = path;
+        button.title = name;
+
+        var mark = browseElement('span', 'browse-folder-icon', icon);
+        mark.setAttribute('aria-hidden', 'true');
+
+        button.appendChild(mark);
+        button.appendChild(browseElement('span', 'browse-folder-name', name));
+
+        if (count !== null) {
+            button.appendChild(browseElement('span', 'browse-folder-count', String(count)));
+        }
+
+        row.appendChild(button);
+
+        return row;
+    }
+
+    // 画像の1枚。押すとサムネイルに決まる。
+    function browseImageCell(file) {
+        var button = browseElement('button', 'browse-image');
+
+        button.type = 'button';
+        button.dataset.browseFile = file.path;
+        button.dataset.browseUrl = file.url;
+        button.title = file.name;
+
+        var box = browseElement('span', 'browse-image-box');
+        var img = document.createElement('img');
+
+        img.src = file.url;
+        img.alt = '';
+        img.loading = 'lazy';
+        img.decoding = 'async';
+
+        box.appendChild(img);
+        button.appendChild(box);
+        button.appendChild(browseElement('span', 'browse-image-name', file.name));
+
+        return button;
+    }
+
+    function browseRender(data) {
+        var crumbs = data.crumbs || [];
+        var dirs   = data.dirs || [];
+        var files  = data.files || [];
+
+        // パス表示。押すとその階層へ戻る。
+        browseCrumbs.textContent = '';
+
+        crumbs.forEach(function (crumb, index) {
+            if (index > 0) {
+                browseCrumbs.appendChild(browseElement('span', 'browse-sep', '/'));
+            }
+
+            if (index === crumbs.length - 1) {
+                browseCrumbs.appendChild(browseElement('span', 'browse-crumb current', crumb.name));
+
+                return;
+            }
+
+            var button = browseElement('button', 'browse-crumb', crumb.name);
+
+            button.type = 'button';
+            button.dataset.browsePath = crumb.path;
+
+            browseCrumbs.appendChild(button);
+        });
+
+        // フォルダ。いちばん上に「上のフォルダへ」を置く。
+        browseFolders.textContent = '';
+
+        if (typeof data.parent === 'string') {
+            browseFolders.appendChild(
+                browseFolderRow('上のフォルダへ', data.parent, '↑', null));
+        }
+
+        dirs.forEach(function (one) {
+            browseFolders.appendChild(browseFolderRow(one.name, one.path, '📁', one.count));
+        });
+
+        // 画像
+        browseImages.textContent = '';
+
+        files.forEach(function (one) {
+            browseImages.appendChild(browseImageCell(one));
+        });
+
+        if (files.length === 0) {
+            browseSay(dirs.length === 0
+                ? 'このフォルダには、画像もフォルダもありません。'
+                : 'このフォルダに画像はありません。フォルダを開いて探してください。');
+        } else if (data.cut) {
+            browseSay('画像が多いため、名前順の先頭 ' + files.length + ' 枚だけを並べています。');
+        } else {
+            browseSay('');
+        }
+    }
+
+    function browseLoad(path) {
+        if (!browseModal || browseBusy) {
+            return;
+        }
+
+        browseBusy = true;
+        browseSay('読み込んでいます…');
+
+        var url = 'browse.php?root=' + encodeURIComponent(browseModal.dataset.root || '') +
+            '&path=' + encodeURIComponent(path || '');
+
+        fetch(url, { credentials: 'same-origin' }).then(function (response) {
+            return response.json().catch(function () {
+                throw new Error('サーバーから読み取れる返事がありませんでした。');
+            });
+        }).then(function (data) {
+            browseBusy = false;
+
+            if (!data.ok) {
+                browseSay(data.message || 'フォルダを読み込めませんでした。');
+
+                return;
+            }
+
+            browseRender(data);
+        }).catch(function (error) {
+            browseBusy = false;
+            browseSay(error.message || 'フォルダを読み込めませんでした。');
+        });
+    }
+
+    // 選んだ1枚を、フォルダ情報の画面に写す。
+    function browseChoose(path, url) {
+        if (!thumbPick) {
+            return;
+        }
+
+        thumbPick.disabled = false;
+        thumbPick.value = path;
+        thumbPick.checked = true;
+
+        if (thumbLabel) {
+            thumbLabel.textContent = path;
+        }
+
+        if (thumbPreview) {
+            thumbPreview.textContent = '';
+
+            var img = document.createElement('img');
+
+            img.src = url;
+            img.alt = '';
+            img.decoding = 'async';
+
+            thumbPreview.appendChild(img);
+        }
+
+        updateRandomFrom();
+    }
+
+    // 開くのは、いま選んである画像のあるフォルダ。まだ選んでいなければ、
+    // いま開いているフォルダから始める（そこにある画像を使うことが多いため）。
+    function browseFrom() {
+        var chosen = thumbPick ? thumbPick.value : '';
+
+        if (chosen !== '') {
+            var slash = chosen.lastIndexOf('/');
+
+            return slash === -1 ? '' : chosen.slice(0, slash);
+        }
+
+        return browseModal.dataset.start || '';
+    }
+
+    function showBrowse(opener) {
+        if (!browseModal) {
+            return;
+        }
+
+        browseOpener = opener || null;
+        browseModal.hidden = false;
+
+        browseLoad(browseFrom());
+        browseModal.querySelector('[data-browse-close]').focus();
+    }
+
+    function closeBrowse() {
+        if (!browseModal || browseModal.hidden) {
+            return;
+        }
+
+        browseModal.hidden = true;
+
+        if (browseOpener) {
+            browseOpener.focus();
+            browseOpener = null;
+        }
+    }
+
+    if (browseModal) {
+        browseModal.addEventListener('click', function (event) {
+            var target = event.target;
+
+            if (!target || !target.closest) {
+                return;
+            }
+
+            // 枠の外側を押したときも閉じる（下のフォルダ情報の画面は開いたまま）
+            if (target === browseModal || target.closest('[data-browse-close]')) {
+                closeBrowse();
+
+                return;
+            }
+
+            var folder = target.closest('[data-browse-path]');
+
+            if (folder) {
+                browseLoad(folder.dataset.browsePath);
+
+                return;
+            }
+
+            var image = target.closest('[data-browse-file]');
+
+            if (image) {
+                browseChoose(image.dataset.browseFile, image.dataset.browseUrl);
+                closeBrowse();
+            }
+        });
+
+        // ブラウズを開いているあいだの Esc は、こちらだけを閉じる。
+        // 下のフォルダ情報の画面は data-modal-keep なので、そのまま残る。
+        document.addEventListener('keydown', function (event) {
+            if (event.key === 'Escape' && !browseModal.hidden) {
+                event.preventDefault();
+                closeBrowse();
             }
         });
     }
@@ -370,6 +686,21 @@
 
         // 前に開いたときの書きかけは残さず、画面を読み込んだ時点の内容に戻す
         infoRows.innerHTML = infoRowsHtml;
+
+        // ブラウズで選んだ1枚も、選ぶ前の状態に戻す。
+        // ラジオの value は form.reset() では戻らないので、ここで書き戻す。
+        if (thumbStart) {
+            thumbPick.value = thumbStart.value;
+            thumbPick.disabled = thumbStart.disabled;
+
+            if (thumbLabel) {
+                thumbLabel.textContent = thumbStart.label;
+            }
+
+            if (thumbPreview) {
+                thumbPreview.innerHTML = thumbStart.preview;
+            }
+        }
 
         var form = infoModal.querySelector('form');
         form.reset();
@@ -912,6 +1243,15 @@
         showMenuItem('rename', single);
         showMenuItem('download', single && !items[0].isFolder);
         showMenuItem('move', onItem);
+
+        // 留めるものが残っているとき・外せるものがあるときだけ出す
+        showMenuItem('pin', onItem && items.some(function (item) {
+            return !item.pinned;
+        }));
+        showMenuItem('unpin', onItem && items.some(function (item) {
+            return item.pinned;
+        }));
+
         showMenuItem('delete', onItem);
         showMenuItem('mkdir', !onItem);
         showMenuItem('info', !onItem);
@@ -990,6 +1330,12 @@
                 break;
             case 'delete':
                 showDelete(items, opener);
+                break;
+            case 'pin':
+                submitPin(items, true);
+                break;
+            case 'unpin':
+                submitPin(items, false);
                 break;
             case 'download':
                 download(items[0].src, items[0].name);
@@ -1254,6 +1600,9 @@
                     break;
                 case 'mkdir':
                     showMkdir(trigger);
+                    break;
+                case 'thumb-browse':
+                    showBrowse(trigger);
                     break;
                 case 'info-add':
                     addInfoRow();
@@ -2130,7 +2479,33 @@
 
     // ---- ライトボックス --------------------------------------------
 
-    var thumbs = Array.prototype.slice.call(document.querySelectorAll('.thumb'));
+    // 一覧のサムネイルと、フォルダ情報の下のピン留め。
+    // ピン留めは一覧にも出ていることが多いので、同じものは一覧の側にまとめ、
+    // 一覧に出ていないもの（ページ送りや絞り込みで隠れているもの）だけを足す。
+    var thumbs = Array.prototype.slice.call(document.querySelectorAll('#grid .thumb'));
+    var sameAs = [];
+
+    Array.prototype.forEach.call(
+        document.querySelectorAll('.pin-thumb'),
+        function (pin) {
+            var href = pin.getAttribute('href');
+            var found = -1;
+
+            thumbs.forEach(function (one, index) {
+                if (found === -1 && one.getAttribute('href') === href) {
+                    found = index;
+                }
+            });
+
+            if (found === -1) {
+                thumbs.push(pin);
+
+                return;
+            }
+
+            sameAs.push({ element: pin, index: found });
+        }
+    );
 
     if (!lightbox || thumbs.length === 0) {
         return;
@@ -2250,14 +2625,21 @@
 
     // クリックしたらすぐ開く。ダウンロードは右クリックメニューにあるので、
     // ダブルクリックかどうかを待って見極める必要はない。
-    thumbs.forEach(function (thumb, index) {
-        thumb.addEventListener('click', function (event) {
+    function openOnClick(element, index) {
+        element.addEventListener('click', function (event) {
             event.preventDefault();
 
             // 選択モード中のクリックは、選択の処理が先に受け取って止めている
 
             open(index);
         });
+    }
+
+    thumbs.forEach(openOnClick);
+
+    // 一覧にも出ているピン留めは、一覧の側の1件として開く
+    sameAs.forEach(function (one) {
+        openOnClick(one.element, one.index);
     });
 
     lightbox.querySelector('.lb-close').addEventListener('click', close);

@@ -11,6 +11,9 @@ const PV_INFO_FILE = 'info.json';
 // info.json の thumbnail にこう書くと、そのフォルダ以下から1枚を選んで出す
 const PV_INFO_RANDOM = 'random';
 
+// 1つのフォルダにピン留めできる数の上限
+const PV_PIN_LIMIT = 30;
+
 /**
  * URLで指定されたルート（写真・動画）の名前を確かめる。
  * 知らない名前が来たときは、既定のルートに落とす。
@@ -271,6 +274,7 @@ function pv_count_images(string $dir, array $extensions): int
  *            'random' => 毎回選び直したものか,
  *            'randomFrom' => 選ぶ範囲（null なら info.json のあるフォルダ以下）] か null
  *   items … [['item' => 見出し, 'value' => 中身, 'url' => リンク先か null], …]
+ *   pinned … ピン留めした名前の並び（このフォルダ直下のものだけ）
  *
  * $withThumb に false を渡すと、サムネイルを実在する画像として確かめる処理を省き、
  * thumb は常に null になる。thumbnail: random はフォルダ以下を探し回るため、
@@ -309,16 +313,17 @@ function pv_read_info(array $config, string $relative, bool $withThumb = true): 
     $thumbnail = trim(pv_info_scalar($data['thumbnail'] ?? null));
 
     $info = [
-        'title' => trim(pv_info_scalar($data['title'] ?? null)),
-        'thumb' => $withThumb ? pv_info_thumb($config, $relative, $thumbnail) : null,
-        'items' => pv_info_items($data['items'] ?? []),
+        'title'  => trim(pv_info_scalar($data['title'] ?? null)),
+        'thumb'  => $withThumb ? pv_info_thumb($config, $relative, $thumbnail) : null,
+        'items'  => pv_info_items($data['items'] ?? []),
+        'pinned' => pv_info_names($data['pinned'] ?? []),
     ];
 
     // 表示できるものが何も無いなら、ファイルが無いのと同じ扱いにする。
     // サムネイルを確かめていないときは、書かれてさえいれば中身ありとみなす。
     $hasThumb = $withThumb ? $info['thumb'] !== null : $thumbnail !== '';
 
-    if ($info['title'] === '' && !$hasThumb && $info['items'] === []) {
+    if ($info['title'] === '' && !$hasThumb && $info['items'] === [] && $info['pinned'] === []) {
         return null;
     }
 
@@ -428,9 +433,11 @@ function pv_count_info_status(array $config): array
 /**
  * info.json の thumbnail を、実在する画像として確かめる。
  *
- * 書き方は2とおり。まず info.json と同じフォルダにあるものとして探し、
+ * 先頭が / のときは、写真（動画）ルートからの道順としてだけ探す。
+ * 画面の「画像を選ぶ」でほかのフォルダの画像を選んだときは、この書き方で保存する。
+ * そうでないときは、まず info.json と同じフォルダにあるものとして探し、
  * 見つからなければ、写真（動画）ルートからの相対パスとして探す。
- * どちらの場合も pv_resolve_file() を通すので、ルートの外や隠しファイルは指せない。
+ * いずれも pv_resolve_file() を通すので、ルートの外や隠しファイルは指せない。
  */
 function pv_info_thumb(array $config, string $relative, string $name): ?array
 {
@@ -459,11 +466,17 @@ function pv_info_thumb(array $config, string $relative, string $name): ?array
     $extensions = pv_image_extensions($config);
     $candidates = [];
 
-    if ($relative !== '') {
-        $candidates[] = $relative . '/' . $name;
-    }
+    // 先頭の / は「ルートの直下から」の印。同じ名前のサブフォルダがあっても、
+    // そちらを先に拾ってしまわないよう、ルートからの道順だけを見る。
+    if ($name[0] === '/') {
+        $candidates[] = $name;
+    } else {
+        if ($relative !== '') {
+            $candidates[] = $relative . '/' . $name;
+        }
 
-    $candidates[] = $name;
+        $candidates[] = $name;
+    }
 
     foreach ($candidates as $candidate) {
         $normalized = pv_normalize_relative($candidate);
@@ -632,6 +645,115 @@ function pv_info_items($raw): array
     }
 
     return $items;
+}
+
+/**
+ * info.json の pinned を、名前の並びに整える。
+ *
+ * ピン留めできるのは、その info.json と同じフォルダにある写真・動画・フォルダだけ。
+ * フォルダ区切りや隠し名（. で始まる名前）が書かれていたら、その1件を落とす。
+ * 実在するかどうかはここでは見ない（表示するときに確かめる）。
+ *
+ * 増やしすぎて画面が壊れないよう、件数にも上限を設ける。
+ */
+function pv_info_names($raw): array
+{
+    if (!is_array($raw)) {
+        return [];
+    }
+
+    $names = [];
+
+    foreach ($raw as $one) {
+        $name = trim(pv_info_scalar($one));
+
+        if ($name === '' || $name[0] === '.') {
+            continue;
+        }
+
+        if (strpos($name, '/') !== false || strpos($name, '\\') !== false) {
+            continue;
+        }
+
+        if (in_array($name, $names, true)) {
+            continue;
+        }
+
+        $names[] = $name;
+
+        if (count($names) >= PV_PIN_LIMIT) {
+            break;
+        }
+    }
+
+    return $names;
+}
+
+/**
+ * ピン留めした名前を、表示に使う形に整えて返す。
+ * 名前を変えたあとの info.json など、実在しなくなったものは並びから落とす。
+ *
+ * 返り値は次の形の配列。
+ *   type  … 'dir' か 'file'
+ *   name  … 実際の名前
+ *   label … 画面に出す名前（フォルダは info.json の title があればそちら）
+ *   path  … ルートからの相対パス
+ *   url   … ファイルのURL（フォルダは null）
+ *   kind  … 'image' か 'video'（フォルダは null）
+ *   thumb … サムネイルのURL（無ければ null）
+ *   size / mtime … ファイルの大きさと更新日時（フォルダは 0）
+ */
+function pv_pinned_entries(array $config, string $relative, array $names): array
+{
+    $entries = [];
+
+    foreach ($names as $name) {
+        $path   = $relative === '' ? $name : $relative . '/' . $name;
+        $target = pv_resolve_path($config['album_dir'], $path);
+
+        if ($target === null) {
+            continue;
+        }
+
+        if (is_dir($target)) {
+            $info = pv_read_info($config, $path);
+
+            $entries[] = [
+                'type'  => 'dir',
+                'name'  => $name,
+                'label' => ($info !== null && $info['title'] !== '') ? $info['title'] : $name,
+                'path'  => $path,
+                'url'   => null,
+                'kind'  => null,
+                'thumb' => ($info !== null && $info['thumb'] !== null) ? $info['thumb']['url'] : null,
+                'size'  => 0,
+                'mtime' => 0,
+            ];
+
+            continue;
+        }
+
+        // 一覧に出るものだけを留められるので、いま開いているルートの拡張子で確かめる
+        if (pv_resolve_file($config['album_dir'], $path, $config['extensions']) === null) {
+            continue;
+        }
+
+        $url = pv_image_url($config['album_url'], $relative, $name);
+
+        $entries[] = [
+            'type'  => 'file',
+            'name'  => $name,
+            'label' => $name,
+            'path'  => $path,
+            'url'   => $url,
+            'kind'  => pv_is_video($config, $name) ? 'video' : 'image',
+            'thumb' => $url,
+            'size'  => filesize($target) ?: 0,
+            'mtime' => filemtime($target) ?: 0,
+        ];
+    }
+
+    return $entries;
 }
 
 /**

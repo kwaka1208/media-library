@@ -99,6 +99,16 @@ switch ((string) ($_POST['action'] ?? '')) {
         );
         break;
 
+    case 'pin':
+        $paths  = $_POST['paths'] ?? [];
+        $result = pv_do_pin(
+            $config,
+            (string) ($_POST['dir'] ?? ''),
+            is_array($paths) ? $paths : [$paths],
+            (string) ($_POST['pin'] ?? '1') === '1'
+        );
+        break;
+
     case 'mkdir':
         $result = pv_do_mkdir(
             $config,

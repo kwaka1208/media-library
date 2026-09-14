@@ -10,7 +10,8 @@
  *       "items": [
  *         { "item": "開催日", "value": "2026-04-05" },
  *         { "item": "場所", "value": "井の頭公園", "url": "https://example.com/park" }
- *       ]
+ *       ],
+ *       "pinned": ["cover.jpg", "当日の様子"]
  *     }
  *
  * 読み書きは PHP に元から入っている json_decode / json_encode だけを使う。
@@ -46,10 +47,10 @@ function pv_info_decode(string $raw): array
 /**
  * info.json を書き出す。編集画面から保存するときに使う。
  *
- * 書き出すのは title / thumbnail / items だけ。手で書き足したほかのキーは
- * 残らないので、そのことは README に断っている。
+ * 書き出すのは title / thumbnail / items / pinned だけ。手で書き足した
+ * ほかのキーは残らないので、そのことは README に断っている。
  */
-function pv_info_encode(string $title, string $thumbnail, array $items): string
+function pv_info_encode(string $title, string $thumbnail, array $items, array $pinned = []): string
 {
     $data = [];
 
@@ -70,14 +71,23 @@ function pv_info_encode(string $title, string $thumbnail, array $items): string
                 'value' => (string) ($one['value'] ?? ''),
             ];
 
-            if (($one['url'] ?? '') !== '') {
-                $row['url'] = (string) $one['url'];
+            // url は書かれているときだけ入れる。読み込んだ側は「無し」を null で
+            // 持っているので、文字ならびに直してから確かめる。
+            $url = (string) ($one['url'] ?? '');
+
+            if ($url !== '') {
+                $row['url'] = $url;
             }
 
             $rows[] = $row;
         }
 
         $data['items'] = $rows;
+    }
+
+    // ピン留め。フォルダ直下の名前を、留めた順に並べる。
+    if ($pinned !== []) {
+        $data['pinned'] = array_values(array_map('strval', $pinned));
     }
 
     if ($data === []) {

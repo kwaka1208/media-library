@@ -26,6 +26,7 @@ media-library/
 ├── index.php           メイン画面
 ├── action.php          整理操作（名前の変更・移動・削除・フォルダ作成）の受け口
 ├── upload.php          ドラッグ＆ドロップで取り込むときの受け口（JSONを返す）
+├── browse.php          フォルダ情報のサムネイルを選ぶときの受け口（JSONを返す）
 ├── make-htpasswd.php   .htpasswd を生成するCLIスクリプト
 ├── lib/functions.php   フォルダ走査・パス検証などの共通関数
 ├── lib/json.php        info.json の読み書き
@@ -35,7 +36,7 @@ media-library/
 ├── tools/convert-info.php  以前の info.yml を info.json に変換するCLIスクリプト（移行用）
 ├── tools/yaml-read.php     変換スクリプトが使う、小さなYAMLの読み取り
 ├── assets/style.css    スタイル
-├── assets/app.js       拡大表示・動画再生・絞り込み・リスト表示・右クリックメニューの動作
+├── assets/app.js       拡大表示・動画再生・絞り込み・リスト表示・右クリックメニュー・画像を選ぶ画面の動作
 ├── photos/             写真を置くフォルダ
 │   ├── .htaccess       このフォルダでのスクリプト実行を禁止する設定
 │   ├── .trash/         ゴミ箱（初めて削除したときに自動で作られる）
@@ -59,6 +60,8 @@ media-library/
 - **検索エンジン対策**：`<meta name="robots" content="noindex, nofollow">` を出力しています。
 - **CSRF対策**：整理操作はすべてPOSTで受け、セッションに持たせたトークンと照合します。
   一覧を開いているブラウザが、外部サイトのフォームから `action.php` を叩かされるのを防ぐためです。
+  `browse.php` は読むだけで何も書き換えず、返すのも一覧画面で見える範囲と同じものなので、
+  GETで受け、トークンは求めていません。
 - **閲覧できる人の限定は任意**：このツール自体はログイン機能を持ちません。
   URLを知っている人に見せたくない場合は、Basic認証を設定してください
   （→ [README「Basic認証をかける」](../README.md#4-basic認証をかける任意)）。

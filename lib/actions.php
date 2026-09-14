@@ -185,6 +185,15 @@ function pv_do_rename(array $config, string $relative, string $newName): array
         return ['ok' => false, 'message' => $label . 'の名前を変更できませんでした。'];
     }
 
+    // ピン留めは名前で持っているので、付け替えておく
+    $parentRelative = dirname($target['relative']);
+    pv_pin_rename(
+        $config,
+        ($parentRelative === '.' || $parentRelative === '/') ? '' : $parentRelative,
+        $target['name'],
+        $newName
+    );
+
     return ['ok' => true, 'message' => $label . 'の名前を「' . $newName . '」に変更しました。'];
 }
 
@@ -193,6 +202,7 @@ function pv_do_rename(array $config, string $relative, string $newName): array
  *
  * 対象はいま開いているフォルダ1つだけ。書き換えるのは title / thumbnail / items で、
  * 手で書き足したほかのキーは残らない。
+ * ピン留め（pinned）はこの画面では触らないので、書かれていたものをそのまま残す。
  * すべて空のときは、情報をやめる操作とみなして info.json をゴミ箱へ移す。
  */
 function pv_do_info(array $config, string $dirRelative, string $title, string $thumbnail, array $items, string $randomFrom = 'self'): array
@@ -227,30 +237,62 @@ function pv_do_info(array $config, string $dirRelative, string $title, string $t
         return ['ok' => false, 'message' => 'リンクに使えないURLが含まれています。http:// か https://、または同じサイトの中の道順を指定してください。'];
     }
 
-    if ($title === '' && $thumbnail === '' && $rows === []) {
+    // ピン留めは、この画面には出していない。書かれていたものを読み直して残す。
+    // 名前が変わったりゴミ箱へ移ったりしたものは、ここで落としておく。
+    $pinned = pv_pin_alive($config, $relative, pv_info_names(pv_info_stored($dir)['pinned'] ?? []));
+
+    if ($title === '' && $thumbnail === '' && $rows === [] && $pinned === []) {
         return pv_info_remove($config, $relative, $path);
     }
 
-    $json = pv_info_encode($title, $thumbnail, $rows);
+    if (!pv_info_save($dir, pv_info_encode($title, $thumbnail, $rows, $pinned))) {
+        return ['ok' => false, 'message' => 'フォルダ情報を保存できませんでした。書き込み権限を確認してください。'];
+    }
 
-    // 書きかけのファイルが残らないよう、別の名前で書いてから置き換える
+    return ['ok' => true, 'message' => 'フォルダ情報を保存しました。'];
+}
+
+/**
+ * info.json を、書かれているまま配列にして返す。
+ * 書き換えるときに、いま入っている内容を残すために使う。
+ */
+function pv_info_stored(string $dir): array
+{
+    $path = $dir . '/' . PV_INFO_FILE;
+
+    if (!is_file($path) || !is_readable($path)) {
+        return [];
+    }
+
+    $raw = @file_get_contents($path);
+
+    return $raw === false ? [] : pv_info_decode($raw);
+}
+
+/**
+ * info.json を書き出す。書きかけのファイルが残らないよう、
+ * 別の名前で書いてから置き換える。
+ */
+function pv_info_save(string $dir, string $json): bool
+{
+    $path = $dir . '/' . PV_INFO_FILE;
     $temp = $dir . '/.' . PV_INFO_FILE . '.' . bin2hex(random_bytes(4)) . '.tmp';
 
     if (@file_put_contents($temp, $json, LOCK_EX) === false) {
         @unlink($temp);
 
-        return ['ok' => false, 'message' => 'フォルダ情報を保存できませんでした。書き込み権限を確認してください。'];
+        return false;
     }
 
     if (!@rename($temp, $path)) {
         @unlink($temp);
 
-        return ['ok' => false, 'message' => 'フォルダ情報を保存できませんでした。書き込み権限を確認してください。'];
+        return false;
     }
 
     @chmod($path, 0644);
 
-    return ['ok' => true, 'message' => 'フォルダ情報を保存しました。'];
+    return true;
 }
 
 /**
@@ -308,8 +350,13 @@ function pv_info_field(string $value, int $maxLength): string
 
 /**
  * 選ばれたサムネイルを確かめる。
- * 使えるのは「空」「random」「そのフォルダにある画像のファイル名」のみ。
+ * 使えるのは「空」「random」「写真（動画）フォルダの中にある画像」のみ。
  * 見つからないものが指定されたときは null を返す。
+ *
+ * 画像は、編集画面の「画像を選ぶ」からルートの中を辿って選ぶ。送られてくるのは
+ * ルートからの道順で、同じフォルダの画像ならファイル名だけにして書き出す。
+ * こうしておくと、あとでフォルダ名を変えても指定が壊れない。
+ * ほかのフォルダの画像は、先頭に / を付けて「ルートの直下から」の形で書き出す。
  *
  * $randomFrom は「ランダム」を選んだときの範囲。編集画面から送られてくる。
  *   'self'        … info.json のあるフォルダ以下（従来どおり。random とだけ書く）
@@ -327,18 +374,31 @@ function pv_info_input_thumb(array $config, string $relative, string $thumbnail,
         return pv_info_input_random($config, $randomFrom);
     }
 
-    // フォルダをまたぐ指定は編集画面からは選べないので、ここでは受け付けない
-    if (strpos($thumbnail, '/') !== false || strpos($thumbnail, '\\') !== false) {
-        return null;
-    }
+    // 送られてくるのはルートからの道順。ファイル名だけのときは、
+    // これまでどおり、いま開いているフォルダの中のものとして扱う。
+    $target = strpos($thumbnail, '/') === false && $relative !== ''
+        ? $relative . '/' . $thumbnail
+        : $thumbnail;
 
-    $target = $relative === '' ? $thumbnail : $relative . '/' . $thumbnail;
+    $target = pv_normalize_relative($target);
 
     if (pv_resolve_file($config['album_dir'], $target, pv_image_extensions($config)) === null) {
         return null;
     }
 
-    return $thumbnail;
+    // 同じフォルダにある画像は、ファイル名だけで書く（フォルダ名を変えても壊れない）
+    $prefix = $relative === '' ? '' : $relative . '/';
+
+    if ($prefix !== '' && strpos($target, $prefix) === 0
+        && strpos(substr($target, strlen($prefix)), '/') === false) {
+        return substr($target, strlen($prefix));
+    }
+
+    if ($relative === '' && strpos($target, '/') === false) {
+        return $target;
+    }
+
+    return '/' . $target;
 }
 
 /**
@@ -401,6 +461,237 @@ function pv_info_input_items($items): ?array
     }
 
     return $rows;
+}
+
+// ---- ピン留め ------------------------------------------------------
+// フォルダ情報（info.json）の pinned に、そのフォルダ直下の名前を並べて持つ。
+// 留めたものは、一覧の横（画面が狭いときは上）のフォルダ情報の下に出る。
+
+/**
+ * ピン留めの並びから、実体が無くなったものを落とす。
+ * 名前を変えたり、ゴミ箱へ移したりしたあとの名前が残らないようにする。
+ */
+function pv_pin_alive(array $config, string $relative, array $names): array
+{
+    $alive = [];
+
+    foreach ($names as $name) {
+        $path   = $relative === '' ? $name : $relative . '/' . $name;
+        $target = pv_resolve_path($config['album_dir'], $path);
+
+        if ($target === null) {
+            continue;
+        }
+
+        // ファイルは、一覧に出るもの（いま開いているルートの拡張子）だけを残す
+        if (!is_dir($target)
+            && pv_resolve_file($config['album_dir'], $path, $config['extensions']) === null) {
+            continue;
+        }
+
+        $alive[] = $name;
+    }
+
+    return $alive;
+}
+
+/**
+ * フォルダ情報の pinned を書き換える。
+ * title / thumbnail / items は、書かれているものをそのまま書き戻す。
+ * 書くものが何も無くなったときは、info.json をゴミ箱へ移す。
+ */
+function pv_pin_store(array $config, string $relative, array $pinned): array
+{
+    $dir = pv_resolve_dir($config['album_dir'], $relative);
+
+    if ($dir === null) {
+        return ['ok' => false, 'message' => 'フォルダが見つかりませんでした。画面を読み込み直してください。'];
+    }
+
+    if (!is_writable($dir)) {
+        return ['ok' => false, 'message' => 'このフォルダに書き込む権限がないため、ピン留めを保存できませんでした。'];
+    }
+
+    $path = $dir . '/' . PV_INFO_FILE;
+
+    // 同じ名前でフォルダやリンクが置かれている場合は触らない
+    if (file_exists($path) && (!is_file($path) || is_link($path))) {
+        return ['ok' => false, 'message' => PV_INFO_FILE . ' を書き換えられませんでした。'];
+    }
+
+    $stored = pv_info_stored($dir);
+
+    $title     = pv_info_field(pv_info_scalar($stored['title'] ?? null), 200);
+    $thumbnail = pv_info_field(pv_info_scalar($stored['thumbnail'] ?? null), 255);
+    $rows      = pv_info_items($stored['items'] ?? []);
+
+    if ($title === '' && $thumbnail === '' && $rows === [] && $pinned === []) {
+        return pv_info_remove($config, $relative, $path);
+    }
+
+    if (!pv_info_save($dir, pv_info_encode($title, $thumbnail, $rows, $pinned))) {
+        return ['ok' => false, 'message' => 'ピン留めを保存できませんでした。書き込み権限を確認してください。'];
+    }
+
+    return ['ok' => true, 'message' => ''];
+}
+
+/**
+ * ピン留めする／外す。対象はいま開いているフォルダの直下にあるものだけ。
+ * 複数まとめて渡せる（一覧でまとめて選んだとき）。
+ */
+function pv_do_pin(array $config, string $dirRelative, array $relatives, bool $on): array
+{
+    $relative = pv_clean_relative($dirRelative);
+    $dir      = pv_resolve_dir($config['album_dir'], $relative);
+
+    if ($dir === null) {
+        return ['ok' => false, 'message' => 'フォルダが見つかりませんでした。画面を読み込み直してください。'];
+    }
+
+    $names = [];
+
+    foreach ($relatives as $one) {
+        $target = pv_resolve_target($config, (string) $one);
+
+        if ($target === null) {
+            return ['ok' => false, 'message' => '対象が見つかりませんでした。画面を読み込み直してください。'];
+        }
+
+        $parent = dirname($target['relative']);
+        $parent = ($parent === '.' || $parent === '/') ? '' : $parent;
+
+        // 留められるのは、そのフォルダの中のものだけ。
+        // 名前だけを info.json に書くので、別のフォルダのものは指せない。
+        if ($parent !== $relative) {
+            return ['ok' => false, 'message' => 'いま開いているフォルダの中のものだけをピン留めできます。'];
+        }
+
+        if (!in_array($target['name'], $names, true)) {
+            $names[] = $target['name'];
+        }
+    }
+
+    if ($names === []) {
+        return ['ok' => false, 'message' => '対象が選ばれていません。'];
+    }
+
+    $pinned = pv_pin_alive($config, $relative, pv_info_names(pv_info_stored($dir)['pinned'] ?? []));
+    $before = $pinned;
+
+    foreach ($names as $name) {
+        if ($on) {
+            if (!in_array($name, $pinned, true)) {
+                $pinned[] = $name;
+            }
+
+            continue;
+        }
+
+        $rest = [];
+
+        foreach ($pinned as $kept) {
+            if ($kept !== $name) {
+                $rest[] = $kept;
+            }
+        }
+
+        $pinned = $rest;
+    }
+
+    if (count($pinned) > PV_PIN_LIMIT) {
+        return [
+            'ok'      => false,
+            'message' => 'ピン留めは1つのフォルダに ' . PV_PIN_LIMIT . ' 件までです。',
+        ];
+    }
+
+    if ($pinned === $before) {
+        return [
+            'ok'      => true,
+            'message' => $on ? 'すでにピン留めされています。' : 'ピン留めされているものはありませんでした。',
+        ];
+    }
+
+    $result = pv_pin_store($config, $relative, $pinned);
+
+    if (!$result['ok']) {
+        return $result;
+    }
+
+    $what = count($names) === 1 ? '「' . $names[0] . '」を' : count($names) . '件を';
+
+    return ['ok' => true, 'message' => $what . ($on ? 'ピン留めしました。' : 'ピン留めから外しました。')];
+}
+
+/**
+ * 名前を変えたときに、ピン留めの名前も付け替える。
+ * 留めていなければ何もしない。表示のついでに動く処理なので、
+ * 書き込めないサーバーでも、元の操作の結果は変えない。
+ */
+function pv_pin_rename(array $config, string $relative, string $oldName, string $newName): void
+{
+    $dir = pv_resolve_dir($config['album_dir'], $relative);
+
+    if ($dir === null) {
+        return;
+    }
+
+    $pinned  = pv_info_names(pv_info_stored($dir)['pinned'] ?? []);
+    $changed = false;
+    $rest    = [];
+
+    foreach ($pinned as $name) {
+        if ($name === $oldName) {
+            $name    = $newName;
+            $changed = true;
+        }
+
+        if (!in_array($name, $rest, true)) {
+            $rest[] = $name;
+        }
+    }
+
+    if ($changed) {
+        pv_pin_store($config, $relative, $rest);
+    }
+}
+
+/**
+ * ゴミ箱へ移したり、ほかのフォルダへ移したりしたものを、ピン留めから外す。
+ * 対象はいくつでも渡せる。入っていたフォルダごとにまとめて書き換える。
+ */
+function pv_pin_forget(array $config, array $targets): void
+{
+    $byFolder = [];
+
+    foreach ($targets as $target) {
+        $parent = dirname($target['relative']);
+        $parent = ($parent === '.' || $parent === '/') ? '' : $parent;
+
+        $byFolder[$parent][] = $target['name'];
+    }
+
+    foreach ($byFolder as $parent => $names) {
+        $dir = pv_resolve_dir($config['album_dir'], (string) $parent);
+
+        if ($dir === null) {
+            continue;
+        }
+
+        $pinned  = pv_info_names(pv_info_stored($dir)['pinned'] ?? []);
+        $rest    = [];
+
+        foreach ($pinned as $name) {
+            if (!in_array($name, $names, true)) {
+                $rest[] = $name;
+            }
+        }
+
+        if ($rest !== $pinned) {
+            pv_pin_store($config, (string) $parent, $rest);
+        }
+    }
 }
 
 /**
@@ -503,6 +794,9 @@ function pv_do_delete(array $config, array $relatives): array
         return ['ok' => false, 'message' => 'ゴミ箱へ移動できませんでした。書き込み権限を確認してください。'];
     }
 
+    // もう無いものがピン留めに残らないようにする
+    pv_pin_forget($config, $moved);
+
     if ($failed !== []) {
         return [
             'ok'      => false,
@@ -554,6 +848,9 @@ function pv_do_move(array $config, array $relatives, string $destinationRelative
     $moved  = 0;
     $failed = [];
 
+    // 動かせたものを控えておき、元のフォルダのピン留めから外す
+    $done = [];
+
     foreach ($targets as $target) {
         if (dirname($target['path']) === $destination) {
             $failed[] = $target['name'] . '（すでにそのフォルダにあります）';
@@ -580,7 +877,10 @@ function pv_do_move(array $config, array $relatives, string $destinationRelative
         }
 
         $moved++;
+        $done[] = $target;
     }
+
+    pv_pin_forget($config, $done);
 
     if ($moved === 0) {
         return ['ok' => false, 'message' => '移動できませんでした： ' . implode('、', $failed)];
