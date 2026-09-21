@@ -1,613 +1,363 @@
-# Googleアカウントで閲覧できる人を限定する
+# Googleアカウントでログインする
 
-このツールを、あらかじめ決めておいたGoogleアカウントの人だけが開けるようにする方法です。
+決めておいたGoogleアカウントの人だけが、このツールを開けるようにします。
+ツールに組み込んである機能なので、外部のサービスは使いません。
 
-Cloudflare の **Cloudflare Access**（Zero Trust）をサーバーの手前に置いて、
-そこで認証を済ませてもらう形をとります。ツール本体のPHPには手を入れません。
-
-- 無料の範囲（50ユーザーまで）で使えます
-- 独自ドメインで運用していることが条件です
-- 作業時間の目安は1時間ほど。うちDNSの反映待ちが大半です
-
-> **この文書は手順書です。** 実際の設定作業はまだ行っていません。
-> 手順5の `.htaccess` だけはツール側のファイルを書き換える必要があるので、
-> 進めるときに反映してください。
+設定に必要な時間は30分ほどです。うちGoogle側の登録作業が大半を占めます。
 
 ## 目次
 
-- [なぜこの方法をとるか](#なぜこの方法をとるか)
+- [守れる範囲（先に読んでください）](#守れる範囲先に読んでください)
+- [用意するもの](#用意するもの)
 - [全体の流れ](#全体の流れ)
-- [はじめる前に](#はじめる前に)
-- [手順1 : ドメインを Cloudflare に載せる](#手順1--ドメインを-cloudflare-に載せる)
-- [手順2 : SSL を設定する](#手順2--ssl-を設定する)
-- [手順3 : Google を認証先として登録する](#手順3--google-を認証先として登録する)
-- [手順4 : 保護するURLと、通す人を決める](#手順4--保護するurlと通す人を決める)
-- [手順5 : 裏口を塞ぐ（重要）](#手順5--裏口を塞ぐ重要)
-- [手順6 : 動作を確かめる](#手順6--動作を確かめる)
-- [任意 : ログイン中のアカウントを画面に出す](#任意--ログイン中のアカウントを画面に出す)
+- [手順1 : Google Cloud Console で鍵を作る](#手順1--google-cloud-console-で鍵を作る)
+- [手順2 : auth-config.php を作る](#手順2--auth-configphp-を作る)
+- [手順3 : サーバーへ送る](#手順3--サーバーへ送る)
+- [手順4 : 動作を確かめる](#手順4--動作を確かめる)
+- [日々の使いかた](#日々の使いかた)
 - [うまくいかないとき](#うまくいかないとき)
-- [知っておいてほしいこと](#知っておいてほしいこと)
-- [付録 : PHPに認証を自前で組み込む案](#付録--phpに認証を自前で組み込む案)
+- [Basic認証との関係](#basic認証との関係)
+- [仕組み](#仕組み)
 
-## なぜこの方法をとるか
+## 守れる範囲（先に読んでください）
 
-このツールは、写真・動画のファイルを `photos/` `movies/` に置いて、
+**守れるのは、PHPを通る画面だけです。**
+
+| | ログインが要る |
+|---|---|
+| 一覧の画面（`index.php`） | 要る |
+| 整理の操作（`action.php`） | 要る |
+| フォルダを辿る画面（`browse.php`） | 要る |
+| ドラッグ＆ドロップの取り込み（`upload.php`） | 要る |
+| **写真・動画のファイルそのもの** | **要らない** |
+
+このツールは、写真・動画を `photos/` `movies/` に置いて、
 ブラウザから**直接URLで**読み込ませています。PHPを通っていません。
 
 ```
-ブラウザ ──> index.php  （PHP。一覧の画面を組み立てる）
-        └──> photos/2024/IMG_0001.jpg  （PHPを通らない。ただのファイル）
+ブラウザ ──> index.php                    （PHP。ログインが要る）
+        └──> photos/2024/IMG_0001.jpg     （PHPを通らない。ログインは要らない）
 ```
 
-そのため、PHPの中にログイン処理を書き足しても、写真そのものは守れません。
-URLさえ知っていれば誰でも開けてしまいます。
+そのため、写真のURLを直接知っている人は、ログインしていなくてもその写真を開けます。
+一覧に出てこないので普通は見つかりませんが、「URLさえ分かれば見られる」状態ではあります。
 
-きちんと守ろうとすると、写真の配信もPHPを経由させる作りに変える必要があり、
-動画のシーク（再生位置の移動）に必要な Range リクエストの処理まで
-自分で書くことになります。作業量が大きいわりに、表示は今より遅くなります。
+身内で見るだけなら、これで足りることがほとんどです。
+**URLを知られること自体が困る**なら、サーバーの手前で止める方法に切り替えてください
+（→ [Cloudflare Access で、写真・動画のファイルまで守る](cloudflare-access.md)）。
 
-Cloudflare Access はサーバーの手前に立つので、PHPもファイルも区別なく、
-まとめて後ろに隠せます。今回これを選んだのはそのためです。
+## 用意するもの
 
-```mermaid
-flowchart LR
-    U[閲覧する人] --> CF{Cloudflare Access}
-    CF -->|許可したアカウント| S[さくらのサーバー<br/>index.php / photos / movies]
-    CF -->|それ以外| X[Googleのログイン画面へ]
-```
+- **Googleアカウント**。鍵を作るのに使います
+- **HTTPSで開ける公開URL**。Googleは `https://` のURLしか戻り先として受け付けません
+  （例外は `http://localhost`。手元で試すときに使えます）
+- **許可したい人のメールアドレス**。Googleアカウントのものである必要があります
+- **サーバーからインターネットへ出られること**。PHPの cURL、または `allow_url_fopen` の
+  どちらかが使えれば動きます。たいていのレンタルサーバーは、どちらかが有効です
 
 ## 全体の流れ
 
 | | やること | 作業する場所 |
 |---|---|---|
-| 手順1 | ドメインを Cloudflare に載せる | Cloudflare / さくらの会員メニュー |
-| 手順2 | SSL を設定する | Cloudflare |
-| 手順3 | Google を認証先として登録する | Google Cloud Console / Cloudflare |
-| 手順4 | 保護するURLと、通す人を決める | Cloudflare Zero Trust |
-| 手順5 | 裏口を塞ぐ | `.htaccess`（このツール） |
-| 手順6 | 動作を確かめる | ブラウザ |
+| 手順1 | Google Cloud Console で鍵を作る | Google Cloud Console |
+| 手順2 | `auth-config.php` を作る | 手元のパソコン |
+| 手順3 | サーバーへ送る | 手元のパソコン |
+| 手順4 | 動作を確かめる | ブラウザ |
 
-## はじめる前に
+## 手順1 : Google Cloud Console で鍵を作る
 
-用意しておくもの、確認しておくことです。
-
-- **独自ドメイン**。`pote2.sakura.ne.jp` のような、さくらから割り当てられた
-  ドメインでは Cloudflare に載せられません
-- **Cloudflare のアカウント**（無料で作れます）
-- **Google アカウント**。認証の入口を作るのに使います
-- **許可したい人のメールアドレス**。Googleアカウントのものである必要があります
-
-そして、いちばん大事な確認です。
-
-> **そのドメインでメールを送受信していませんか。**
->
-> 手順1でネームサーバーを Cloudflare に変えると、DNSの設定は
-> Cloudflare 側のものに切り替わります。メール用の MX レコードを
-> 移し忘れると、**そのドメイン宛のメールが届かなくなります**。
->
-> Cloudflare はドメインを追加するときに既存のDNSレコードを読み取って
-> 引き継ごうとしますが、取りこぼすことがあります。手順1の途中で
-> 必ず自分の目で確かめてください。確認箇所は手順1の中に書いています。
-
-## 手順1 : ドメインを Cloudflare に載せる
-
-### 1-1. Cloudflare にドメインを追加する
-
-1. [Cloudflare](https://dash.cloudflare.com/) にログインする
-2. **Add a domain** から、使っているドメイン（例 `example.com`）を入れる
-3. プランは **Free** を選ぶ
-4. Cloudflare が今のDNSレコードを読み取って一覧にする
-
-### 1-2. DNSレコードを確かめる（ここが山場）
-
-読み取られた一覧を、さくらの会員メニューにある今のDNS設定と見比べます。
-とくに次のものが**抜けていないか**を確認してください。
-
-| 種類 | 何のためのものか | 抜けたときに起きること |
-|---|---|---|
-| `MX` | メールの宛先 | **メールが届かなくなる** |
-| `TXT`（SPF / DKIM / DMARC） | 送ったメールが本物だと示す | 送ったメールが迷惑メール扱いされる |
-| `A` / `CNAME`（`www` など） | サイトの場所 | サイトが開かなくなる |
-| `CNAME`（`_domainkey` など） | 各種サービスの所有確認 | 連携しているサービスが切れる |
-
-足りないものは、この画面で手で足しておきます。
-
-**プロキシの設定**（オレンジ色の雲のアイコン）は次のようにします。
-
-- このツールを置いているホスト名（例 `media.example.com`）… **プロキシ有効（オレンジの雲）**
-- `MX` レコードが指すホスト名 … **プロキシ無効（グレーの雲）**
-- その他のメール関連 … **プロキシ無効（グレーの雲）**
-
-メール系をオレンジにするとメールが止まります。ここは間違えないでください。
-
-### 1-3. ネームサーバーを変更する
-
-Cloudflare が2つのネームサーバー（`xxx.ns.cloudflare.com` のような形）を表示します。
-これをさくら側に登録します。
-
-1. [さくらインターネット会員メニュー](https://secure.sakura.ad.jp/) にログイン
-2. **契約情報** → **契約ドメインの確認** から対象のドメインを選ぶ
-3. **ネームサーバの変更** を開く
-4. もともと入っている `NS1.DNS.NE.JP` `NS2.DNS.NE.JP` を消す
-5. Cloudflare に表示された2つを、ネームサーバ1・ネームサーバ2に入れる
-6. 保存する
-
-登録したら Cloudflare の画面に戻り、**Check nameservers** を押します。
-
-反映には数分から48時間かかります。たいていは1時間以内です。
-`Active` になるまで待ちます。
-
-反映されたかどうかは、手元のターミナルからも見られます。
-
-```
-dig NS example.com +short
-```
-
-`ns.cloudflare.com` を含む結果が返れば切り替わっています。
-
-## 手順2 : SSL を設定する
-
-Cloudflare の **SSL/TLS** → **Overview** で、暗号化モードを選びます。
-
-- さくらの無料SSL（Let's Encrypt）を有効にしている → **Full (strict)**
-- 有効にしていない → まず[さくらの無料SSLを有効にして](https://help.sakura.ad.jp/206053711/)から **Full (strict)**
-
-> **Flexible は選ばないでください。**
-> Cloudflare とサーバーの間が暗号化されないうえ、
-> このツールの `.htaccess` にHTTPSへのリダイレクトを書いている場合、
-> リダイレクトが無限に繰り返されてページが開かなくなります。
-
-あわせて **SSL/TLS** → **Edge Certificates** で
-**Always Use HTTPS** を有効にしておくと、`http://` で来た人も
-自動的に `https://` に回されます。
-
-こうしておけば、このツールの `.htaccess` に書いてある
-HTTPSリダイレクトの4行は、コメントアウトしたままで構いません。
-
-## 手順3 : Google を認証先として登録する
-
-「Googleでログイン」を成立させるための下ごしらえです。
-Google Cloud Console で鍵を作り、それを Cloudflare に渡します。
-
-### 3-1. チーム名を決める
-
-先に Cloudflare 側のチーム名が必要です。
-
-1. Cloudflare のサイドバーから **Zero Trust** を開く
-2. 初回はチーム名（team name）を聞かれるので決める（例 `kwaka`）
-3. プランは **Free** を選ぶ
-
-決めたチーム名から、次のURLができます。手順3-3で使います。
-
-```
-https://<チーム名>.cloudflareaccess.com
-```
-
-### 3-2. Google Cloud Console でクライアントIDを作る
+### 1-1. プロジェクトを作る
 
 1. [Google Cloud Console](https://console.cloud.google.com/) を開く
 2. プロジェクトを新しく作る（名前は何でも構いません。例 `media-library-auth`）
-3. **APIs & Services** → **OAuth consent screen** を開く
-4. **Get started** を押し、アプリ名とサポート用のメールアドレスを入れる
-5. Audience Type は **External** を選ぶ
-6. 連絡先メールアドレスを入れて **Continue** → **Create**
 
-続けて鍵を作ります。
+### 1-2. 同意画面を整える
 
-7. **APIs & Services** → **Credentials** を開く
-8. **Create Credentials** → **OAuth client ID**
-9. Application type は **Web application**
-10. **Authorized JavaScript origins** に次を入れる
+「どのアプリにログインしようとしているのか」をGoogleが利用者に見せる画面です。
 
-    ```
-    https://<チーム名>.cloudflareaccess.com
-    ```
-
-11. **Authorized redirect URIs** に次を入れる
-
-    ```
-    https://<チーム名>.cloudflareaccess.com/cdn-cgi/access/callback
-    ```
-
-12. **Create** を押すと、**クライアントID** と **クライアントシークレット** が出る
-
-この2つは次で使います。シークレットは他人に見せないでください。
-画面を閉じても、後から同じ場所で確認できます。
+1. **APIs & Services** → **OAuth consent screen** を開く
+2. **Get started** を押し、アプリ名とサポート用のメールアドレスを入れる
+   - ここで入れたアプリ名が、ログインするときに表示されます
+3. Audience Type は **External** を選ぶ
+4. 連絡先メールアドレスを入れて **Continue** → **Create**
 
 > 一般のGoogleアカウント（`@gmail.com` など）を使う場合、
-> OAuth同意画面は「テスト」状態のままでも構いません。
+> 同意画面は「テスト」状態のままでも動きます。
 > ただしテスト状態だと、Test users に登録した人しかログインできず、
-> 有効期限も短くなります。継続して使うなら **Publish app**（本番公開）に
-> しておくほうが手間がありません。外部に公開されるのはアプリ名だけで、
-> 誰でも入れるようになるわけではありません。誰を通すかは手順4で決めます。
+> ログインの有効期限も短くなります（7日ほどで切れます）。
+> 続けて使うなら **Publish app**（本番公開）にしておくほうが手間がありません。
+>
+> 本番公開にしても、外部に見えるのはアプリ名だけです。
+> 誰でも入れるようになるわけではありません。誰を通すかは手順2で決めます。
 
-### 3-3. Cloudflare に登録する
+### 1-3. クライアントIDを作る
 
-1. **Zero Trust** → **Integrations** → **Identity providers**
-2. **Add new identity provider** を押す
-3. **Google** を選ぶ
+1. **APIs & Services** → **Credentials** を開く
+2. **Create Credentials** → **OAuth client ID**
+3. Application type は **Web application**
+4. **Authorized redirect URIs** に、このツールの `login.php` のURLを入れる
 
-    - Google Workspace をお使いで、組織のアカウント全体を対象にしたい場合は
-      **Google Workspace** のほうを選びます。今回は個人のGoogleアカウントを
-      想定して **Google** で説明します
-
-4. さきほどのクライアントIDとクライアントシークレットを貼る
-5. **Save** を押す
-6. **Test** を押して、自分のGoogleアカウントでログインできることを確かめる
-
-ここで失敗する場合、たいていはリダイレクトURIの打ち間違いです。
-Google Cloud Console 側の綴りをもう一度見てください。
-
-## 手順4 : 保護するURLと、通す人を決める
-
-### 4-1. アプリケーションを作る
-
-1. **Zero Trust** → **Access controls** → **Applications**
-2. **Create new application** を押す
-3. **Self-hosted and private** を選ぶ
-4. **Add public hostname** を選ぶ
-5. 保護する場所を指定する
-
-    | 項目 | 入れるもの（例） |
-    |---|---|
-    | Subdomain | `media` |
-    | Domain | `example.com` |
-    | Path | （このツールがドメイン直下なら空欄） |
+    ```
+    https://example.com/login.php
+    ```
 
     サブディレクトリに置いている場合（例 `https://example.com/gallery/`）は、
-    Path に `gallery` と入れます。
+    その下の `login.php` を指定します。
 
-6. **Session Duration** を決める。既定は24時間です。
-   毎日使うなら1週間や1か月にすると、ログインを求められる回数が減ります
+    ```
+    https://example.com/gallery/login.php
+    ```
 
-### 4-2. 誰を通すかを決める
+    手元のパソコンで試す場合は、次も足しておくと便利です。
 
-**Access policies** で **Create new policy** を押します。
+    ```
+    http://localhost:8765/login.php
+    ```
 
-1. ポリシー名を決める（例 `家族だけ`）
-2. Action は **Allow**
-3. ルールを次のように作る
+5. **Create** を押すと、**クライアントID** と **クライアントシークレット** が出る
 
-    **決まった人だけ通す場合**
+この2つは次の手順で使います。**シークレットはパスワードと同じ重さのもの**です。
+人に見せたり、リポジトリに入れたりしないでください。
+画面を閉じても、あとから同じ場所で確認できます。
 
-    | Action | Rule type | Selector | Value |
-    |---|---|---|---|
-    | Allow | Include | Emails | `you@gmail.com` |
-    | Allow | Include | Emails | `family@gmail.com` |
+## 手順2 : auth-config.php を作る
 
-    Value は続けて何件でも足せます。
-
-    **ドメイン単位で通す場合**（Google Workspace 向け）
-
-    | Action | Rule type | Selector | Value |
-    |---|---|---|---|
-    | Allow | Include | Emails ending in | `@example.com` |
-
-    **両方を混ぜる場合**
-
-    Include に並べたものは「どれかに当てはまれば通す」という扱いです。
-    社内ドメイン全員と、外部の協力者数名、という指定ができます。
-
-4. 保存して、アプリケーションに割り当てる
-
-ポリシーを1つも作らないと**すべて拒否**になります。
-逆に言えば、書き忘れて誰でも入れる状態になることはありません。
-
-### 4-3. 認証先を絞る
-
-アプリケーションの設定画面で、identity providers から
-**Google** だけを選んでおきます。
-
-こうしないと、ワンタイムPIN（メールに届く数字）でも入れる状態になります。
-「Googleアカウントで認証されたユーザーだけ」という条件にするなら、
-ここは絞っておいてください。
-
-**Apply instant authentication** を有効にすると、
-「どの方法でログインしますか」という選択画面が省かれ、
-いきなりGoogleのログイン画面に飛びます。認証先が1つだけなら
-有効にしておくほうが親切です。
-
-## 手順5 : 裏口を塞ぐ（重要）
-
-**ここを飛ばすと、ここまでの設定がほぼ意味を失います。**
-
-Cloudflare Access が守れるのは「Cloudflare を通ってきたリクエスト」だけです。
-ところが、さくらのレンタルサーバーは独自ドメインとは別に、
-はじめから割り当てられているドメインでも同じ場所に届いてしまいます。
+見本をコピーして作ります。
 
 ```
-https://media.example.com/          ──> Cloudflare を通る ──> 認証あり
-https://pote2.sakura.ne.jp/gallery/ ──> Cloudflare を通らない ──> 素通り
+cp auth-config.php.example auth-config.php
 ```
 
-サーバーのIPアドレスを直接叩かれた場合も同じです。
-この2つを `.htaccess` で塞ぎます。
+`auth-config.php` は `.gitignore` に入れてあるので、
+リポジトリには含まれません。安心して実際の値を書き込んでください。
 
-### 塞ぎ方
+書き換えるのは次の項目です。
 
-このツールの `.htaccess` に、次の2つを足します。
-`.htaccess` は `.htaccess.example` をコピーして作るものなので、
-**両方に同じ内容を入れておく**と、次にサーバーを移すときに困りません。
+| 項目 | 何を書くか |
+|---|---|
+| `client_id` | 手順1で発行された**クライアントID** |
+| `client_secret` | 手順1で発行された**クライアントシークレット** |
+| `redirect_uri` | 手順1で登録したURL。**1文字でも違うとログインできません** |
+| `allowed_emails` | 通す人のメールアドレス。何件でも書けます |
+| `allowed_domains` | 通すドメイン（Google Workspace 向け）。`@` は付けません |
+
+書き終わった `allowed_emails` は、こんな形になります。
+
+```php
+    'allowed_emails' => [
+        'you@gmail.com',
+        'family@gmail.com',
+    ],
+```
+
+`allowed_emails` と `allowed_domains` は「**どちらかに当てはまれば通す**」という扱いです。
+社内ドメイン全員と、外部の協力者を数名、といった指定ができます。
+
+> **両方とも空にすると、誰も入れません。**
+> 書き忘れたまま誰でも入れる状態になるより、自分が入れなくなるほうが安全なので、
+> そういう作りにしてあります。
+
+`enabled` を `false` にすると、設定を残したまま認証だけを止められます。
+`auth-config.php` を置かない場合も、認証なしで動きます。
+
+## 手順3 : サーバーへ送る
+
+`Makefile` を使っている場合は、専用のコマンドがあります。
+
+```
+make deploy-auth-config
+```
+
+ふだんの `make deploy` では `auth-config.php` を送りません。
+手元とサーバーでは `redirect_uri` が違うことが多く、
+うっかり上書きするとサーバー側のログインが壊れるためです。
+
+FTPで送る場合は、設置先のトップ（`index.php` と同じ場所）に置いてください。
+
+**`.htaccess` の確認**
+
+`.htaccess.example` を新しくしてあります。次の行に `auth-config.php` が
+入っているか確かめてください。入っていなければ足します。
 
 ```apache
-# ---------------------------------------------------------------
-# Cloudflare Access を通らないアクセスを拒否する
-#
-# Cloudflare Access は「Cloudflare を通ったリクエスト」しか守れない。
-# さくらの初期ドメインやサーバーのIPを直接叩かれると素通りしてしまうため、
-# ここで入口を独自ドメイン＋Cloudflare経由だけに絞る。
-# ---------------------------------------------------------------
-
-# (1) 独自ドメイン以外のホスト名で来たものを拒否する
-#     media.example.com の部分は、実際に使っているホスト名に書き換えること。
-<IfModule mod_rewrite.c>
-    RewriteEngine On
-    RewriteCond %{HTTP_HOST} !^media\.example\.com$ [NC]
-    RewriteRule ^ - [F,L]
-</IfModule>
-
-# (2) Cloudflare のIPアドレス以外から来たものを拒否する
-#     ホスト名は偽装できるので、こちらが本命の守り。
-#     一覧は https://www.cloudflare.com/ips/ で公開されている。
-#     年に数回更新されるため、つながらなくなったときは確認すること。
-<IfModule mod_authz_core.c>
-    <RequireAny>
-        # IPv4
-        Require ip 173.245.48.0/20
-        Require ip 103.21.244.0/22
-        Require ip 103.22.200.0/22
-        Require ip 103.31.4.0/22
-        Require ip 141.101.64.0/18
-        Require ip 108.162.192.0/18
-        Require ip 190.93.240.0/20
-        Require ip 188.114.96.0/20
-        Require ip 197.234.240.0/22
-        Require ip 198.41.128.0/17
-        Require ip 162.158.0.0/15
-        Require ip 104.16.0.0/13
-        Require ip 104.24.0.0/14
-        Require ip 172.64.0.0/13
-        Require ip 131.0.72.0/22
-        # IPv6
-        Require ip 2400:cb00::/32
-        Require ip 2606:4700::/32
-        Require ip 2803:f800::/32
-        Require ip 2405:b500::/32
-        Require ip 2405:8100::/32
-        Require ip 2a06:98c0::/29
-        Require ip 2c0f:f248::/32
-    </RequireAny>
-</IfModule>
+<FilesMatch "^(config\.php|auth-config\.php|\.htpasswd.*|.*\.sample|.*\.example|.*\.md)$">
 ```
 
-上のIPアドレス一覧は2026年8月時点のものです。
-最新の一覧は次のコマンドで取れます。
+PHPファイルなので、直接開かれても中身が表示されることはありません。
+これは念のための二重の備えです。
 
-```
-curl -s https://www.cloudflare.com/ips-v4; echo; curl -s https://www.cloudflare.com/ips-v6
-```
-
-### Basic認証はどうするか
-
-Cloudflare Access が入れば、`.htaccess` の Basic認証は要りません。
-`AuthType Basic` から `Require valid-user` までの4行はコメントアウトして構いません。
-
-両方有効にしておくこともできますが、閲覧するたびに
-Basic認証のダイアログとGoogleログインの2回を通ることになります。
-
-`.htpasswd` と `make-htpasswd.php` は、Cloudflare を使わない場所に
-置き直すときのために残しておくとよいでしょう。
-
-## 手順6 : 動作を確かめる
+## 手順4 : 動作を確かめる
 
 順番に見ていきます。
 
-**1. 許可したアカウントで入れるか**
+**1. ログイン画面が出るか**
 
-シークレットウィンドウで `https://media.example.com/` を開きます。
-Googleのログイン画面が出て、許可したアカウントでログインすると
+シークレットウィンドウでツールのURLを開きます。
+「Googleでログイン」のボタンが出れば成功です。
+
+**2. 許可したアカウントで入れるか**
+
+ボタンを押し、`allowed_emails` に書いたアカウントでログインします。
 一覧が表示されれば成功です。
 
-**2. 許可していないアカウントが弾かれるか**
+**3. 許可していないアカウントが弾かれるか**
 
-別のGoogleアカウントでログインしてみます。
-「You do not have permission」のような画面が出れば成功です。
+いったんログアウトし、別のGoogleアカウントで試します。
+「このライブラリを見られるアカウントとして登録されていません」と出れば成功です。
 
-**3. 写真そのものも守られているか**
+**4. 開こうとしていた画面に戻るか**
 
-ログアウトした状態（別のシークレットウィンドウ）で、
-写真のURLを直接開いてみます。
+ログアウトした状態で、奥のフォルダのURLを直接開きます。
+ログイン画面を通ったあと、**そのフォルダ**が開けば成功です。
+
+**5. ログアウトできるか**
+
+画面の右上にある「⏻ ログアウト」を押します。
+ログイン画面に戻れば成功です。
+
+## 日々の使いかた
+
+### 閲覧できる人を増やす・減らす
+
+`auth-config.php` の `allowed_emails` を書き換えて、サーバーへ送り直します。
 
 ```
-https://media.example.com/photos/2024/IMG_0001.jpg
+make deploy-auth-config
 ```
 
-ログイン画面に飛べば成功です。写真が表示されてしまったら、
-手順4のPath指定を見直してください。
+**減らしたときは、すぐに効きます。** 一覧から外された人は、
+次に画面を開いた時点で締め出されます（ログイン中でも同じです）。
 
-**4. 裏口が塞がっているか**
+### ログイン中のアカウントを確かめる
 
-```
-curl -I https://pote2.sakura.ne.jp/gallery/
-```
+一覧の右上にある「⏻ ログアウト」のボタンに、マウスを乗せてください。
+どのアカウントで見ているかが吹き出しで出ます。
 
-`403 Forbidden` が返れば成功です。`200 OK` が返ったら手順5ができていません。
+### ログインが続く長さを変える
 
-**5. 動画が再生できるか、シークできるか**
+`auth-config.php` の `session_lifetime` で決めます。既定は30日です。
+最後にツールを開いてからの時間なので、毎日開いていれば切れません。
 
-動画を開いて、再生バーの途中をクリックしてみます。
-そこから再生が続けば問題ありません。
-
-**6. ドラッグ&ドロップで取り込めるか**
-
-大きめの動画ファイルを落としてみます。
-このツールは4MBずつに分けて送るので、Cloudflare 無料プランの
-100MB制限には当たりません。
-
-## 任意 : ログイン中のアカウントを画面に出す
-
-Cloudflare Access は、認証を通したリクエストに
-ログインした人のメールアドレスを添えてサーバーへ渡します。
-これを読めば、画面に「誰として見ているか」を出せます。
-
-**この機能は手順5が済んでいることが前提です。**
-Cloudflare を通らないアクセスを拒否していないと、
-このヘッダは偽装できてしまいます。
-
-`index.php` のヘッダー部分に、次のようなものを足す想定です。
+共用のパソコンから使うなら、短くしておくとよいでしょう。
 
 ```php
-// Cloudflare Access が渡してくるログイン中のメールアドレス。
-// このヘッダを信用してよいのは、.htaccess で Cloudflare 経由以外の
-// アクセスを拒否しているため（→ docs/google-auth.md の手順5）。
-$loginEmail = (string) ($_SERVER['HTTP_CF_ACCESS_AUTHENTICATED_USER_EMAIL'] ?? '');
+    'session_lifetime' => 12 * 60 * 60, // 12時間
 ```
 
-```php
-<?php if ($loginEmail !== ''): ?>
-    <span class="login-user"><?= h($loginEmail) ?></span>
-    <a class="login-logout" href="/cdn-cgi/access/logout">ログアウト</a>
-<?php endif; ?>
-```
+### 認証を一時的に止める
 
-`/cdn-cgi/access/logout` は Cloudflare が用意しているURLです。
-このツール側で用意する必要はありません。
-
-> より厳密にやるなら、`Cf-Access-Jwt-Assertion` ヘッダに入っている
-> JWT を検証します。公開鍵は
-> `https://<チーム名>.cloudflareaccess.com/cdn-cgi/access/certs` から取れ、
-> アプリケーションごとの **Application Audience (AUD) Tag**
-> （Zero Trust → Access controls → Applications → Configure →
-> Additional settings で確認できます）と照合します。
->
-> ただしこれはPHPでのRS256署名検証を自前で書くことになり、
-> 手順5を済ませていれば得られるものはほとんどありません。
-> 今回は必要ないと判断しています。
+`auth-config.php` の `enabled` を `false` にして送り直します。
+設定は残るので、また `true` に戻せばそのまま使えます。
 
 ## うまくいかないとき
 
-**ページが開かず、リダイレクトが繰り返される**
+**redirect_uri_mismatch と出る**
 
-SSLモードが Flexible になっています。手順2に戻って **Full (strict)** にしてください。
+Google Cloud Console に登録したURLと、`auth-config.php` の `redirect_uri` が
+食い違っています。次を見比べてください。
 
-**526 Invalid SSL certificate が出る**
+- `http` と `https` の違い
+- `www.` の有無
+- 末尾の `/login.php` まで入っているか
+- サブディレクトリのパスが合っているか
 
-Full (strict) にしたのに、さくら側の無料SSLが有効になっていません。
-さくらのコントロールパネルで証明書を発行してください。
-急ぐ場合は一時的に **Full**（strict なし）にすると通ります。
+**「設定を確認してください」という画面が出る**
 
-**Googleのログイン画面で redirect_uri_mismatch と出る**
+`enabled` を `true` にしたのに、`client_id` などが空のままです。
+足りない項目の名前が画面に出ているので、それを埋めてください。
 
-Google Cloud Console に登録したリダイレクトURIが違っています。
-末尾の `/cdn-cgi/access/callback` まで含めて、
-チーム名の綴りも含めて見比べてください。
+認証しているつもりで実は素通り、という状態を作らないよう、
+わざとエラーで止めています。
 
-**ログインはできるのに「permission がない」と言われる**
+**「このライブラリを見られるアカウントとして登録されていません」と出る**
 
-手順4-2のポリシーにそのメールアドレスが入っていません。
-Googleアカウントのメールアドレスと、ポリシーに書いたものが
-一致しているか確かめてください（別名のアドレスだと一致しません）。
+ログインはできたものの、`allowed_emails` にも `allowed_domains` にも
+当てはまらなかった、という意味です。画面に出ているアドレスを
+`auth-config.php` に足して、送り直してください。
 
-**自分も 403 で入れなくなった**
+両方とも空になっていないかも確かめてください。空だと誰も通りません。
 
-手順5のIP制限が効きすぎています。
-Cloudflare のDNS設定で、そのホスト名のプロキシがオレンジの雲に
-なっているか確かめてください。グレーだと Cloudflare を経由しないため、
-自分のIPから直接届いて拒否されます。
+**「Googleとのやりとりに失敗しました」と出る**
 
-**アクセスログのIPアドレスが全部 Cloudflare のものになった**
+サーバーからGoogleへ接続できていない可能性があります。
+レンタルサーバーの設定で、cURL と `allow_url_fopen` の
+どちらかが使えるか確認してください。
 
-仕様です。本来のIPアドレスは `CF-Connecting-IP` ヘッダに入っています。
+クライアントシークレットの写し間違いでも、これが出ます。
 
-**メールが届かなくなった**
+**ログインしてもすぐ切れる**
 
-手順1-2の MX レコードを取りこぼしています。
-Cloudflare のDNS画面で MX レコードを確認し、
-足りなければ足してください。またグレーの雲になっているかも確認してください。
+OAuth同意画面が「テスト」状態のままだと、Googleが発行する
+ログインの有効期限が短くなります（7日ほど）。
+手順1-2の **Publish app** を試してください。
 
-## 知っておいてほしいこと
+**ログインの有効期限が切れました、と言われ続ける**
 
-**Cloudflare の利用規約について**
+ブラウザのCookieが無効になっていないか確かめてください。
+このツールはログイン状態をセッションで保つので、Cookieが要ります。
 
-Cloudflare の利用規約 Section 2.8 は、動画など大きなファイルを
-CDN で大量に配信することを制限しています。
-個人や家族で写真・動画を見る規模であれば、まず問題になりません。
-不特定多数に向けた動画配信に育てる場合は、規約を読み直してください。
+**自分も入れなくなった**
 
-**無料プランの制限**
+`auth-config.php` の `enabled` を `false` にすれば、いったん認証を外せます。
+FTPやSSHでサーバー上のファイルを直接書き換えてください。
 
-| | 制限 | このツールへの影響 |
+## Basic認証との関係
+
+`.htaccess` のBasic認証は、これまでどおり使えます。
+ただし**ふつうはどちらか一方で足ります**。
+
+| | Basic認証 | Googleログイン |
 |---|---|---|
-| Access のユーザー数 | 50人まで | 通常は足ります |
-| アップロード1回あたり | 100MB | 4MBずつ送るので影響なし |
-| セッション | 既定24時間 | 手順4-1で延ばせます |
+| 誰を通すか | ユーザー名とパスワードを知っている人 | 登録したGoogleアカウントの人 |
+| パスワードの管理 | 自分で配る・変える | Googleに任せる |
+| 写真・動画の直接URL | **守れる** | 守れない |
+| 誰が見たか | 分からない | 画面に出る |
 
-**外部サービスに依存することについて**
+両方を有効にすると、閲覧のたびにBasic認証のダイアログとGoogleログインの
+2回を通ることになります。
 
-この方法は Cloudflare が動いていることが前提です。
-Cloudflare に障害が起きると、このツールも開けなくなります。
-また、無料プランの条件が将来変わる可能性もあります。
+写真・動画のファイルまで守りたいなら、Basic認証のほうが簡単です。
+そのかわり、パスワードを人に配って回ることになります。
 
-そうなったときは、次の付録の方法に切り替えることになります。
+## 仕組み
 
-## 付録 : PHPに認証を自前で組み込む案
+技術的な話です。使うだけなら読まなくて構いません。
 
-Cloudflare を使わない場合、あるいは将来やめる場合の設計メモです。
-**今回は採用していません。** 必要になったときの下敷きとして残します。
+**OAuth 2.0 の認可コードフロー（PKCE付き）**
 
-### 必要になるもの
+外部ライブラリは使わず、`lib/auth.php` に直接書いています。
+Composer も `vendor/` も要りません。
 
-| ファイル | 役割 |
-|---|---|
-| `auth-config.php` | クライアントIDなどの設定。Git管理から外す（`.gitignore` へ） |
-| `auth-config.php.example` | その見本。リポジトリに入れる |
-| `lib/auth.php` | OAuth 2.0 のフロー、許可アカウントの判定 |
-| `login.php` | ログイン画面、Googleからの戻り先、ログアウト |
-| `media.php` | **写真・動画の配信をPHP経由にする**。ここが最大の作業 |
+1. 「Googleでログイン」を押すと、`state` `nonce` `code_verifier` を作ってセッションに控え、
+   Googleの認可画面へ送り出す
+2. Googleから `login.php` へ戻ってきたら、`state` が自分の送り出したものか確かめる
+3. 認可コードを、サーバーからGoogleへ直接送ってトークンと交換する
+4. 返ってきた `id_token` の中身を確かめ、メールアドレスを取り出す
+5. 許可リストと突き合わせ、通ればセッションに記録する
 
-### 手をつける必要がある既存のコード
+**`id_token` の署名を検証していない理由**
 
-- `lib/functions.php` の `pv_image_url()` … `media.php` 経由のURLを返すように変える
-- `index.php` … 先頭で認証を必須にする
-- `action.php` … 未ログインならエラーにして戻す
-- `upload.php` … 未ログインなら JSON で 401 を返す
-- `photos/.htaccess` `movies/.htaccess` … 直接アクセスを全面的に禁止する
-- `config.php` … 各ルートの `url` は使わなくなる
+`id_token` は、認可コードと引き換えに**GoogleからTLS越しに直接**受け取ったものです。
+途中で誰かが差し替えられる経路を通っていないため、署名検証は省き、
+`iss` / `aud` / `exp` / `nonce` / `email_verified` の確認だけにしています。
+これは OpenID Connect Core 3.1.3.7 が認めている扱いです。
 
-### `media.php` で必要になる処理
+ブラウザ経由で `id_token` を受け取る形（implicit flow）にするなら、
+署名の検証が必要になります。
 
-- パスを `realpath` で解決し、ルートの外を指していないか確かめる
-- 拡張子がそのルートの `extensions` に含まれるか確かめる
-- `Content-Type` を返す
-- **`Range` リクエストへの対応**。これがないと動画のシークができない
-- `Last-Modified` / `ETag` / `304 Not Modified`
-- `Cache-Control: private`
+**そのほかの備え**
 
-### ID トークンの扱い
-
-認可コードをサーバー側でトークンと交換する形（authorization code flow）なら、
-`id_token` は Google から TLS 越しに直接受け取ったものになります。
-この場合、署名検証は省いて `iss` / `aud` / `exp` / `nonce` / `email_verified`
-の確認だけでよい、と OpenID Connect Core 3.1.3.7 が認めています。
-
-外部ライブラリなしで書けるのはこのためです。
-署名検証まで自前でやるなら `firebase/php-jwt` を入れるのが早道ですが、
-Composer と `vendor/` の転送が増えます。
-
-### この方法の弱点
-
-- 写真60枚の一覧で、PHPのプロセスが60本走る。共有サーバーでは詰まりやすい
-- 現状はサムネイルを作らずフルサイズの画像を並べているため、
-  PHP経由にすると初回表示がはっきり遅くなる
-  （`media.php` を作るなら、同時にサムネイル生成を入れるのが自然）
-- 許可アカウントを変えるたびにファイルを編集してデプロイする必要がある
+- ログインの前後でセッションIDを作り直す（他人が用意したIDを引き継がせない）
+- ログインの開始とログアウトは POST で受け、CSRFトークンを通す
+- ログイン後の戻り先は、`/` で始まる自サイト内のパスだけを受け付ける
+  （`//example.com` のような、別サイトへ飛ばす形は弾く）
+- 更新用のトークン（refresh token）は受け取らない。閲覧のたびにGoogleへ
+  問い合わせる必要がないため
 
 ---
 
 **参考にした資料**
 
-- [Cloudflare Zero Trust : Self-hosted アプリケーションの設定](https://developers.cloudflare.com/cloudflare-one/applications/configure-apps/self-hosted-public-app/)
-- [Cloudflare Zero Trust : Google を IdP にする](https://developers.cloudflare.com/cloudflare-one/integrations/identity-providers/google/)
-- [Cloudflare Zero Trust : ポリシーの書き方](https://developers.cloudflare.com/cloudflare-one/access-controls/policies/)
-- [Cloudflare : IPアドレス一覧](https://www.cloudflare.com/ips/)
-- [さくらインターネット : 無料SSLの設定](https://help.sakura.ad.jp/206053711/)
+- [Google Identity : OpenID Connect](https://developers.google.com/identity/openid-connect/openid-connect)
+- [OpenID Connect Core 1.0](https://openid.net/specs/openid-connect-core-1_0.html)
+- [RFC 7636 : Proof Key for Code Exchange (PKCE)](https://datatracker.ietf.org/doc/html/rfc7636)

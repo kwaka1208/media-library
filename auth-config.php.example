@@ -1,0 +1,66 @@
+<?php
+/**
+ * Media Library : Googleアカウント認証の設定（見本）
+ *
+ * 使い方
+ *   1) このファイルを auth-config.php という名前でコピーする
+ *        cp auth-config.php.example auth-config.php
+ *   2) Google Cloud Console で取得した値を書き込む
+ *        → 取得の手順は docs/google-auth.md
+ *
+ * auth-config.php は .gitignore に入れてあるため、リポジトリには含まれません。
+ * クライアントシークレットはパスワードと同じ重さのものです。
+ * コピーしたファイルを、そのまま公開の場に置かないでください。
+ *
+ * このファイル（auth-config.php）を置いていない場合、認証は無効として扱われ、
+ * ツールは今までどおり誰でも開ける状態で動きます。
+ */
+
+return [
+    // 認証を使うかどうか。
+    // false にすると、設定を残したまま認証だけを止められる。
+    'enabled' => true,
+
+    // ---- Google Cloud Console で取得する値 --------------------------
+    // APIs & Services → Credentials → OAuth client ID（Web application）
+    // で作成すると、次の2つが発行される。
+
+    'client_id'     => 'xxxxxxxxxxxx.apps.googleusercontent.com',
+    'client_secret' => 'GOCSPX-xxxxxxxxxxxxxxxxxxxx',
+
+    // Googleのログインが終わったあとに戻ってくるURL。
+    // このツールの login.php を、公開URLで指定する。
+    //
+    // ここに書いた文字列と、Google Cloud Console の
+    // 「Authorized redirect URIs」に登録した文字列は、
+    // 末尾のスラッシュまで含めて完全に一致している必要がある。
+    // 食い違うと redirect_uri_mismatch というエラーになる。
+    'redirect_uri' => 'https://example.com/login.php',
+
+    // ---- 誰を通すか ------------------------------------------------
+    // 下の2つは「どちらかに当てはまれば通す」という扱い。
+    //
+    // 【重要】両方とも空のときは、誰も通さない。
+    // 書き忘れて誰でも入れる状態になることを防ぐため、こうしている。
+
+    // 通すGoogleアカウントのメールアドレス。
+    // 大文字・小文字は区別しない。
+    'allowed_emails' => [
+        // 'you@gmail.com',
+        // 'family@gmail.com',
+    ],
+
+    // 通すドメイン。Google Workspace で組織のアカウント全体を
+    // 対象にしたいときに使う。@ は付けない。
+    'allowed_domains' => [
+        // 'example.com',
+    ],
+
+    // ---- ログインを保つ長さ ----------------------------------------
+    // 最後にツールを開いてから、この秒数が過ぎるとログインし直しになる。
+    // 既定は30日。毎日使うなら長めに、共用のパソコンから使うなら短めに。
+    //
+    // なお、PHPのセッション自体にもサーバー側の寿命があるため、
+    // ここを延ばしても、それより先にログインが切れることがある。
+    'session_lifetime' => 30 * 24 * 60 * 60,
+];

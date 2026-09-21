@@ -11,6 +11,7 @@ $config = require __DIR__ . '/config.php';
 require __DIR__ . '/lib/functions.php';
 require __DIR__ . '/lib/actions.php';
 require __DIR__ . '/lib/upload.php';
+require __DIR__ . '/lib/auth.php';
 
 pv_session_start();
 
@@ -41,6 +42,10 @@ if ($_POST === [] && $_FILES === []) {
         'message' => '一度に送る大きさがサーバーの上限を超えました。画面を読み込み直してから、もう一度お試しください。',
     ], 413);
 }
+
+// ログインが切れている間に送られてきたものは受け取らない。
+// （認証を使っていないときは、この判定は素通りする）
+pv_auth_require_json();
 
 if (!empty($config['read_only'])) {
     pv_upload_reply(['ok' => false, 'message' => 'このツールは閲覧専用の設定になっています。'], 403);

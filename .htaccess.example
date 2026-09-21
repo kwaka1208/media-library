@@ -15,6 +15,11 @@
 # 既定では無効にしてある。閲覧できる人を限定したいときだけ、
 # 下の4行のコメント（#）を外して使う。
 #
+# 閲覧できる人を限定する方法は、もう1つある。Googleアカウントでのログイン
+# （auth-config.php／→ docs/google-auth.md）で、こちらはツール側で処理する。
+# ふつうはどちらか一方で足りる。両方を有効にすると、閲覧するたびに
+# Basic認証のダイアログとGoogleログインの2回を通ることになる。
+#
 # AuthUserFile は「サーバー上の絶対パス」で指定する必要がある。
 # 下の行は見本なので、設置先の絶対パスに必ず書き換えること。
 # 書き換えないと認証が動かず、サーバーエラー（500）になる。
@@ -37,7 +42,10 @@ DirectoryIndex index.php
 Options -Indexes
 
 # 設定ファイル・パスワードファイル・見本ファイルへの直接アクセスを禁止する
-<FilesMatch "^(config\.php|\.htpasswd.*|.*\.sample|.*\.example|.*\.md)$">
+#
+# auth-config.php にはクライアントシークレットが入る。PHPとして実行されるので
+# 中身がそのまま表示されることはないが、念のためここでも塞いでおく。
+<FilesMatch "^(config\.php|auth-config\.php|\.htpasswd.*|.*\.sample|.*\.example|.*\.md)$">
     <IfModule mod_authz_core.c>
         Require all denied
     </IfModule>

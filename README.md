@@ -3,8 +3,10 @@
 サーバー上の写真・動画を、ブラウザから一覧・再生するためのPHPツールです。
 写真は `photos/`、動画は `movies/` に置き、画面上部のタブで切り替えます。
 
-閲覧できる人を限定したいときは、Basic認証をかけられます。
-既定では無効なので、必要なときだけ設定してください（→ [Basic認証をかける](#4-basic認証をかける任意)）。
+閲覧できる人を限定したいときは、2つのやり方があります。
+Googleアカウントでのログイン（→ [Googleアカウントでログインできるようにする](#5-googleアカウントでログインできるようにする任意)）と、
+Apache の Basic認証（→ [Basic認証をかける](#4-basic認証をかける任意)）です。
+どちらも既定では無効なので、必要なときだけ設定してください。
 
 このREADMEでは、ツールの概要と設置手順を説明します。
 画面での操作は [使い方](docs/usage.md)、内部の作りは [内部のしくみ](docs/tech.md) にまとめています。
@@ -57,6 +59,15 @@
   - パソコンから写真・動画を落とすと、開いているフォルダに入る
   - フォルダごと落とすと、中の構成をそのまま作り直す
   - ファイルを小さく切って送るので、共有サーバーの上限に左右されず大きな動画も上げられる
+- 閲覧できる人を限定する（どちらも任意。既定では無効）
+  - Googleアカウントでのログイン（→ [Googleアカウントでログインする](docs/google-auth.md)）
+    - 許可したメールアドレス・ドメインの人だけが開ける
+    - 外部のサービスは使わず、PHPだけで完結する
+    - 誰として見ているかが画面に出る
+    - 守れるのは画面まで。写真・動画の直接URLは守れない
+  - Apache の Basic認証（→ [Basic認証をかける](#4-basic認証をかける任意)）
+    - 共有のユーザー名とパスワードを知っている人だけが開ける
+    - 写真・動画の直接URLも守れる
 
 ## 動作環境
 
@@ -65,10 +76,13 @@
 - 整理機能を使う場合は、`photos/` `movies/` に書き込み権限があること
 - Basic認証を使う場合は、Apache の `mod_auth_basic` が有効であること
   （多くのレンタルサーバーでは既定で有効です）
+- Googleアカウントでのログインを使う場合は、サーバーからインターネットへ出られること
+  （PHPの cURL、または `allow_url_fopen` のどちらかが使えれば動きます）
 - 動画の再生には、サーバーが範囲リクエスト（HTTP Range）に応じること
   （Apache の静的ファイル配信では既定で有効です。シークができない場合はここを確認してください）
 - 整理機能はCSRF対策にセッションを使うため、ブラウザ側でCookieが有効であること
-  （閲覧するだけならCookieは不要です）
+  （閲覧するだけならCookieは不要です。ただしGoogleアカウントでのログインを使う場合は、
+  ログイン状態をセッションで保つため、閲覧だけでもCookieが要ります）
 
 ## インストール
 
@@ -144,14 +158,15 @@ movies/
 
 ### 4. Basic認証をかける（任意）
 
-このツール自体はログイン機能を持ちません。URLを知っている人なら誰でも見られる状態です。
-閲覧できる人を限定したいときは、Apache の Basic認証をかけてください。
+既定では、URLを知っている人なら誰でも見られる状態です。
+閲覧できる人を限定するやり方のひとつが、Apache の Basic認証です。
 
 **見本ファイル（`.htaccess.example`）では、Basic認証は無効にしてあります。**
 使う場合だけ、以下の 4-1 と 4-2 の両方を行ってください。
 
-共有のIDとパスワードではなく、Googleアカウント単位で閲覧者を絞りたい場合は、
-[Googleアカウントで閲覧できる人を限定する](docs/google-auth.md) を参照してください。
+共有のIDとパスワードを配る代わりに、Googleアカウント単位で絞りたい場合は、
+手順5（→ [Googleアカウントでログインできるようにする](#5-googleアカウントでログインできるようにする任意)）を使ってください。
+両方を設定することもできますが、ふつうはどちらか一方で足ります。
 
 #### 4-1. `.htpasswd` を作る
 
@@ -222,7 +237,47 @@ Require valid-user
 > 通信経路上で読み取られる可能性があります。SSL証明書を有効にし、`.htaccess` の
 > 末尾にあるHTTPSリダイレクトのコメントを外してから使ってください。
 
-### 5. サーバーへの反映（Makefile）（任意）
+### 5. Googleアカウントでログインできるようにする（任意）
+
+決めておいたGoogleアカウントの人だけが開けるようにします。
+外部のサービスは使わず、PHPの中で完結します。
+
+> **先に知っておいてください。守れるのは画面だけです。**
+> 写真・動画のファイルは `photos/` `movies/` から直接配信されるため、
+> URLを知っている人は、ログインしていなくてもその写真を開けます。
+> URLを知られること自体が困る場合は、
+> [Cloudflare Access で、写真・動画のファイルまで守る](docs/cloudflare-access.md) を
+> 参照してください。
+
+手順の概要は次のとおりです。詳しくは
+[Googleアカウントでログインする](docs/google-auth.md) にまとめています。
+
+1. [Google Cloud Console](https://console.cloud.google.com/) で OAuth クライアントIDを作る
+   - リダイレクトURIには、このツールの `login.php` のURLを登録します
+     （例 `https://example.com/login.php`）
+2. 見本をコピーして、設定ファイルを作る
+
+    ```
+    cp auth-config.php.example auth-config.php
+    ```
+
+3. `auth-config.php` に、クライアントID・クライアントシークレット・戻り先のURL・
+   通す人のメールアドレスを書く
+4. サーバーへ送る
+
+    ```
+    make deploy-auth-config
+    ```
+
+**`auth-config.php` はリポジトリに含まれません。**
+`.gitignore` に入れてあるので、クライアントシークレットが GitHub に上がることはありません。
+`make deploy` でも転送しません（手元とサーバーでは戻り先のURLが違うためです）。
+送るときは専用の `make deploy-auth-config` を使ってください。
+
+`auth-config.php` を置かなければ、今までどおり認証なしで動きます。
+設定を残したまま止めたいときは、`enabled` を `false` にしてください。
+
+### 6. サーバーへの反映（Makefile）（任意）
 
 2回目以降の更新は、`make` コマンドで差分だけを転送できます。使わなくても運用できます。
 
@@ -257,7 +312,9 @@ make deploy-media     photos/ movies/ の中身もサーバーへ転送する
 make remote-init      サーバー側に photos/ movies/ を作る（初回のみ）
 make htpasswd         .htpasswd を作る（対話入力）
 make deploy-htpasswd  .htpasswd をサーバーへ転送
-make ssh              サーバーにSSHでログイン
+
+make deploy-auth-config  auth-config.php をサーバーへ転送
+make ssh                 サーバーにSSHでログイン
 ```
 
 いきなり `make deploy` せず、まず `make diff` で何が転送されるか確かめることをおすすめします。
@@ -276,6 +333,9 @@ make ssh              サーバーにSSHでログイン
   手元とサーバーで中身が違って当然のためです。
 - **`.htpasswd` は `make deploy` では転送しません。** サーバー上の認証情報を
   うっかり上書きしないためです。更新したいときは `make deploy-htpasswd` を使ってください。
+- **`auth-config.php` も `make deploy` では転送しません。** 手元とサーバーでは
+  戻り先のURLが違うことが多く、上書きするとサーバー側のログインが壊れるためです。
+  更新したいときは `make deploy-auth-config` を使ってください。
 - **`.htaccess` は `make deploy` で転送します。** 手元で書き換えた内容がそのまま反映されます。
   手元に `.htaccess` がないときは、転送せずにその場で止まります。
   見本ファイル（`*.example`）はサーバーへ送りません。
@@ -290,6 +350,8 @@ make remote-init      # サーバー側に photos/ movies/ を作る
 make deploy           # ツール本体を転送
 make htpasswd         # 認証情報を作る（Basic認証を使う場合のみ）
 make deploy-htpasswd  # 認証情報を転送（同上）
+cp auth-config.php.example auth-config.php # Googleログインを使う場合のみ（中身を書いてから）
+make deploy-auth-config                    # 同上
 make deploy-media     # 写真・動画を転送（サーバー側に直接置く場合は不要）
 ```
 
@@ -341,7 +403,8 @@ make deploy-media     # 写真・動画を転送（サーバー側に直接置�
 | --- | --- |
 | [使い方](docs/usage.md) | 画面での操作、写真とフォルダの整理、フォルダ情報（`info.json`） |
 | [内部のしくみ](docs/tech.md) | ファイル構成、セキュリティ上の配慮、表示の重さ、旧 `info.yml` からの移行 |
-| [Googleアカウントで閲覧できる人を限定する](docs/google-auth.md) | Cloudflare Access を使った閲覧制限の手順 |
+| [Googleアカウントでログインする](docs/google-auth.md) | ツールに組み込んだGoogleログインの設定手順 |
+| [Cloudflare Access で、写真・動画のファイルまで守る](docs/cloudflare-access.md) | サーバーの手前で認証する方法。写真・動画の直接URLまで守れる |
 
 ## ライセンス
 

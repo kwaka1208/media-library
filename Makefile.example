@@ -31,6 +31,9 @@ PORT       := 8765
 #                            ただし .htaccess はツールの一部なので転送する
 #   .htpasswd             … サーバー上の認証情報を上書きしないため
 #                            （make deploy-htpasswd で送る）
+#   auth-config.php       … Googleアカウント認証の設定。手元とサーバーでは
+#                            redirect_uri が違うため
+#                            （make deploy-auth-config で送る）
 #   *.example             … 見本ファイルはサーバーに置く必要がないため
 # rsync はルールを書いた順に評価するので、include を exclude より先に置く。
 FILTERS := \
@@ -45,12 +48,13 @@ FILTERS := \
 	--exclude '.DS_Store' \
 	--exclude 'Makefile' \
 	--exclude '*.example' \
-	--exclude '.htpasswd'
+	--exclude '.htpasswd' \
+	--exclude 'auth-config.php'
 
 # --delete は使わない。サーバー側のファイルを削除する事故を防ぐため。
 RSYNC_OPTS := -avz --checksum --no-perms --no-owner --no-group $(FILTERS)
 
-.PHONY: help lint diff deploy deploy-media deploy-htpasswd serve ssh htpasswd remote-init
+.PHONY: help lint diff deploy deploy-media deploy-htpasswd deploy-auth-config serve ssh htpasswd remote-init
 
 .DEFAULT_GOAL := help
 
@@ -67,6 +71,8 @@ help:
 	@echo "  make remote-init   サーバー側に photos/ movies/ を作る（初回のみ）"
 	@echo "  make htpasswd         .htpasswd を作る（対話入力）"
 	@echo "  make deploy-htpasswd  .htpasswd をサーバーへ転送"
+	@echo ""
+	@echo "  make deploy-auth-config  auth-config.php をサーバーへ転送"
 	@echo "  make ssh           サーバーにSSHでログイン"
 	@echo ""
 	@echo "  転送先: $(SSH_HOST):$(REMOTE_DIR)"
@@ -111,6 +117,15 @@ deploy-media:
 			--exclude '.trash/' \
 			$$d/ $(SSH_HOST):$(REMOTE_DIR)/$$d/ || exit 1; \
 	done
+	@echo "完了しました。"
+
+# auth-config.php はクライアントシークレットが入るうえ、手元とサーバーで
+# redirect_uri が違うことが多い。ふだんの deploy で送ってしまうと
+# サーバー側の設定を壊すため、.htpasswd と同じく単独のコマンドに分けている。
+deploy-auth-config:
+	@test -f auth-config.php || { echo "auth-config.php がありません。cp auth-config.php.example auth-config.php で作成してください。"; exit 1; }
+	@echo "サーバー上の auth-config.php を上書きします。"
+	@rsync -avz --no-perms --no-owner --no-group auth-config.php $(SSH_HOST):$(REMOTE_DIR)/auth-config.php
 	@echo "完了しました。"
 
 # .htpasswd はうっかり上書きしないよう、単独のコマンドに分けている。

@@ -13,6 +13,7 @@
 
 $config = require __DIR__ . '/config.php';
 require __DIR__ . '/lib/functions.php';
+require __DIR__ . '/lib/auth.php';
 
 // 1回で返す画像の数の上限。多いフォルダでも表示が重くならないようにする。
 const PV_BROWSE_LIMIT = 300;
@@ -33,6 +34,10 @@ function pv_browse_reply(array $body, int $status = 200): void
 if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'GET') {
     pv_browse_reply(['ok' => false, 'message' => '受け付けられない要求です。'], 405);
 }
+
+// ログインしていない人には、フォルダの中身を見せない。
+// （認証を使っていないときは、この判定は素通りする）
+pv_auth_require_json();
 
 // 見に行くルート（写真／動画）。知らない名前が来たら既定のルートに落とす。
 $config = pv_apply_root($config, pv_root_key($config, $_GET['root'] ?? null));

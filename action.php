@@ -10,6 +10,7 @@
 $config = require __DIR__ . '/config.php';
 require __DIR__ . '/lib/functions.php';
 require __DIR__ . '/lib/actions.php';
+require __DIR__ . '/lib/auth.php';
 
 pv_session_start();
 
@@ -47,6 +48,14 @@ $back = pv_back($config);
 
 if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
     header('Location: ' . $back, true, 303);
+    exit;
+}
+
+// ログインが切れている間に送られてきた操作は、実行せずにログイン画面へ送る。
+// （認証を使っていないときは、この判定は素通りする）
+if (pv_auth_enabled() && pv_auth_user() === null) {
+    pv_flash('error', 'ログインの有効期限が切れました。ログインし直してから、もう一度お試しください。');
+    header('Location: ./login.php', true, 303);
     exit;
 }
 

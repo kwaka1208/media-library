@@ -17,22 +17,27 @@ media-library/
 ├── .htaccess           アクセス制限・Basic認証の設定（各自で作成。リポジトリには含めない）
 ├── .htpasswd           認証情報（Basic認証を使う場合のみ作成。リポジトリには含めない）
 ├── .htpasswd.sample    .htpasswd の見本
+├── auth-config.php.example  Googleログインの設定の見本（コピーして auth-config.php を作る）
+├── auth-config.php     Googleログインの設定（各自で作成。リポジトリには含めない）
 ├── .gitignore          認証情報・写真・動画データ・Makefile・.htaccess を除外する設定
 ├── docs/usage.md       画面での操作の説明
 ├── docs/tech.md        この文書（内部構造・セキュリティ）
-├── docs/google-auth.md Googleアカウントで閲覧できる人を限定する手順
+├── docs/google-auth.md Googleアカウントでログインする手順
+├── docs/cloudflare-access.md  写真・動画のファイルまで守りたい場合の手順
 ├── docs/screenshots/   ドキュメントに載せている画面例
 ├── config.php          設定ファイル
 ├── index.php           メイン画面
 ├── action.php          整理操作（名前の変更・移動・削除・フォルダ作成）の受け口
 ├── upload.php          ドラッグ＆ドロップで取り込むときの受け口（JSONを返す）
 ├── browse.php          フォルダ情報のサムネイルを選ぶときの受け口（JSONを返す）
+├── login.php           ログイン画面・Googleからの戻り先・ログアウト
 ├── make-htpasswd.php   .htpasswd を生成するCLIスクリプト
 ├── lib/functions.php   フォルダ走査・パス検証などの共通関数
 ├── lib/json.php        info.json の読み書き
 ├── lib/actions.php     整理操作の中身
 ├── lib/upload.php      取り込んだファイルの受け取り・組み立て
 ├── lib/init.php        初期設定の画面（index.php?init）
+├── lib/auth.php        Googleアカウントでのログイン（OAuth 2.0・許可アカウントの判定）
 ├── tools/convert-info.php  以前の info.yml を info.json に変換するCLIスクリプト（移行用）
 ├── tools/yaml-read.php     変換スクリプトが使う、小さなYAMLの読み取り
 ├── assets/style.css    スタイル
@@ -52,8 +57,10 @@ media-library/
 - **パストラバーサル対策**：`?path=` に `../` を含むパスを渡しても、`realpath()` で
   開いているフォルダ（`photos/` または `movies/`）の配下かどうかを必ず検証してから表示します。
   `?root=` に知らない名前が来たときは、既定のフォルダに落とします。
-- **設定ファイルの保護**：`.htaccess` で `config.php`、`.htpasswd`、`*.sample`、`*.example`、`*.md` への
-  直接アクセスを禁止しています。
+- **設定ファイルの保護**：`.htaccess` で `config.php`、`auth-config.php`、`.htpasswd`、
+  `*.sample`、`*.example`、`*.md` への直接アクセスを禁止しています。
+  `auth-config.php` にはクライアントシークレットが入るため、`.gitignore` にも入れてあり、
+  `make deploy` の転送対象からも外してあります。
 - **写真・動画フォルダでのスクリプト実行禁止**：`photos/.htaccess` と `movies/.htaccess` で、
   万一 `.php` などが置かれても実行されないようにしています。
 - **ディレクトリ一覧の抑止**：`Options -Indexes` により、フォルダの中身が直接一覧表示されるのを防ぎます。
@@ -62,10 +69,24 @@ media-library/
   一覧を開いているブラウザが、外部サイトのフォームから `action.php` を叩かされるのを防ぐためです。
   `browse.php` は読むだけで何も書き換えず、返すのも一覧画面で見える範囲と同じものなので、
   GETで受け、トークンは求めていません。
-- **閲覧できる人の限定は任意**：このツール自体はログイン機能を持ちません。
-  URLを知っている人に見せたくない場合は、Basic認証を設定してください
-  （→ [README「Basic認証をかける」](../README.md#4-basic認証をかける任意)）。
-  Googleアカウントで絞り込む方法は [Googleアカウントで閲覧できる人を限定する](google-auth.md) を参照してください。
+- **閲覧できる人の限定は任意**：既定では、URLを知っている人なら誰でも開けます。
+  限定したい場合は、Googleアカウントでのログイン
+  （→ [Googleアカウントでログインする](google-auth.md)）か、Basic認証
+  （→ [README「Basic認証をかける」](../README.md#4-basic認証をかける任意)）を設定してください。
+- **Googleアカウントでのログイン**：`auth-config.php` を置くと有効になります。
+  OAuth 2.0 の認可コードフロー（PKCE付き）で、外部ライブラリは使っていません。
+  - `state`（CSRF）、`nonce`（使い回しの防止）、`code_verifier`（PKCE）をセッションに控え、
+    戻ってきたときに突き合わせます
+  - `id_token` はGoogleからTLS越しに直接受け取るため署名検証は省き、
+    `iss` / `aud` / `exp` / `nonce` / `email_verified` を確認しています
+    （OpenID Connect Core 3.1.3.7）
+  - ログインの前後でセッションIDを作り直します（セッション固定化の防止）
+  - ログイン後の戻り先は `/` で始まる自サイト内のパスだけを受け付けます
+  - 許可アカウントから外した人は、次に画面を開いた時点で締め出されます
+  - `enabled` が `true` なのに設定が欠けているときは、素通りさせずエラーで停止します
+  - **守れるのはPHPを通る画面だけです。** 写真・動画は `photos/` `movies/` から
+    直接配信されるため、URLを知っている人はログインなしで開けます。
+    ファイル本体まで守るには [Cloudflare Access](cloudflare-access.md) を使ってください
 - **拡張子の固定**：名前を変えても拡張子は元のまま保ちます。`.jpg` や `.mp4` を `.php` に
   付け替えることはできません。
 - **隠しファイルの保護**：`.` で始まる名前を含むパスは、表示も操作も受け付けません。

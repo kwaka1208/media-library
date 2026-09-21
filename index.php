@@ -5,8 +5,14 @@
 
 $config = require __DIR__ . '/config.php';
 require __DIR__ . '/lib/functions.php';
+require __DIR__ . '/lib/auth.php';
 
 pv_session_start();
+
+// ---- ログインの確認 ----------------------------------------------
+// Googleアカウントでの認証を使う設定のときは、ログインしていない人を
+// ログイン画面へ送る。auth-config.php を置いていなければ何もしない。
+pv_auth_require();
 
 // ---- 初期設定の画面 ----------------------------------------------
 // ?init を付けて開いたときは、一覧の代わりに初期設定の画面を出す。
@@ -114,6 +120,9 @@ $canEdit   = empty($config['read_only']) && $writable;
 $token     = pv_csrf_token();
 $messages  = pv_take_flash();
 
+// ログイン中の人（認証を使っていないときは null）
+$authUser  = pv_auth_user();
+
 // 移動先の候補（いま開いているルート配下のフォルダ）
 $folderTree = $canEdit ? pv_folder_tree($root) : [];
 
@@ -188,7 +197,7 @@ if ($info !== null && $info['title'] !== '') {
 }
 ?>
 <title><?= h($pageName . ' | ' . $config['title']) ?></title>
-<link rel="stylesheet" href="assets/style.css?v=26">
+<link rel="stylesheet" href="assets/style.css?v=27">
 <style>:root { --thumb-size: <?= (int) $config['thumb_size'] ?>px; }</style>
 </head>
 <body data-video-muted="<?= h($videoMuted) ?>" data-video-size="<?= h($videoSize) ?>"
@@ -290,6 +299,21 @@ if ($info !== null && $info['title'] !== '') {
             <span class="button-icon" aria-hidden="true">⋯</span>
             <span class="menu-button-label">メニュー</span>
         </button>
+    <?php endif; ?>
+
+    <?php // 誰として見ているか。狭い画面ではアイコンだけになる。 ?>
+    <?php if ($authUser !== null): ?>
+        <form class="logout-form" method="post" action="login.php">
+            <input type="hidden" name="token" value="<?= h($token) ?>">
+            <input type="hidden" name="action" value="logout">
+
+            <button type="submit" class="button logout-button"
+                    title="<?= h($authUser['email']) ?> でログイン中。押すとログアウトします。"
+                    aria-label="<?= h($authUser['email']) ?> でログイン中。ログアウトする">
+                <span class="button-icon" aria-hidden="true">⏻</span>
+                <span class="menu-button-label">ログアウト</span>
+            </button>
+        </form>
     <?php endif; ?>
 </header>
 

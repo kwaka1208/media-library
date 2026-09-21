@@ -2057,3 +2057,51 @@ body[data-view="list"] .card:has(.thumb:focus-visible) {
 }
 
 .upload-notes li + li { border-top: 1px solid var(--border); }
+
+/* ---- ログイン画面（login.php）---- */
+
+.login {
+    width: 100%;
+    max-width: 460px;
+    margin: 8vh auto 0;
+    padding: 30px 26px;
+    text-align: center;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    box-shadow: var(--shadow);
+}
+
+.login-lead {
+    margin: 0 0 22px;
+    font-size: 14px;
+    line-height: 1.9;
+    color: var(--text-muted);
+}
+
+.login-button {
+    padding: 10px 26px;
+    font-size: 15px;
+}
+
+.login-note {
+    margin: 22px 0 0;
+    font-size: 13px;
+    line-height: 1.8;
+    color: var(--text-muted);
+}
+
+/* 知らせは左寄せのほうが読みやすいので、中央寄せの中でも戻しておく */
+.login .notice {
+    margin: 0 0 18px;
+    text-align: left;
+}
+
+/* ---- ログアウト（一覧のヘッダー）---- */
+
+.logout-form {
+    margin: 0;
+    line-height: 0;
+}
+
+.logout-button { color: var(--text-muted); }
