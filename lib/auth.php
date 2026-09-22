@@ -256,6 +256,31 @@ function pv_auth_require_json(): void
 }
 
 /**
+ * Cloudflare Access が渡してくる、ログイン中のメールアドレス。
+ *
+ * サーバーの手前に Cloudflare Access を置いている場合、認証を通した
+ * リクエストにこのヘッダが付く（→ docs/cloudflare-access.md）。
+ * ツールに組み込んだログインを使っていないときでも、これを読めば
+ * 「誰として見ているか」を画面に出せる。
+ *
+ * このヘッダを信用してよいのは、.htaccess で Cloudflare 経由以外の
+ * アクセスを拒否しているため（→ docs/cloudflare-access.md の手順5）。
+ * その設定がない場所では、誰でも名乗れてしまう。そのため、ここで得た値は
+ * 画面に出すだけに使い、通す・通さないの判断には使わない。
+ */
+function pv_auth_access_email(): string
+{
+    $email = (string) ($_SERVER['HTTP_CF_ACCESS_AUTHENTICATED_USER_EMAIL'] ?? '');
+
+    // 妙な値が入っていても、画面に出すのはメールアドレスの形のものだけにする
+    if ($email === '' || filter_var($email, FILTER_VALIDATE_EMAIL) === false) {
+        return '';
+    }
+
+    return $email;
+}
+
+/**
  * 戻り先として受け付けてよいURLかを確かめる。
  *
  * 受け付けるのは「/」で始まる自サイト内のパスだけ。

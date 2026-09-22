@@ -45,7 +45,7 @@ foreach ($config['roots'] as $key => $rootConfig) {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
 <title><?= h('初期設定 | ' . $config['title']) ?></title>
-<link rel="stylesheet" href="assets/style.css?v=27">
+<link rel="stylesheet" href="assets/style.css?v=30">
 </head>
 <body>
 

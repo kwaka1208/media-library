@@ -123,6 +123,10 @@ $messages  = pv_take_flash();
 // ログイン中の人（認証を使っていないときは null）
 $authUser  = pv_auth_user();
 
+// Cloudflare Access で認証している場合の、ログイン中のメールアドレス。
+// ツールに組み込んだログインを止めていても、これで誰として見ているかを出せる。
+$accessEmail = pv_auth_access_email();
+
 // 移動先の候補（いま開いているルート配下のフォルダ）
 $folderTree = $canEdit ? pv_folder_tree($root) : [];
 
@@ -197,7 +201,10 @@ if ($info !== null && $info['title'] !== '') {
 }
 ?>
 <title><?= h($pageName . ' | ' . $config['title']) ?></title>
-<link rel="stylesheet" href="assets/style.css?v=27">
+<link rel="icon" href="assets/favicon.svg?v=1" type="image/svg+xml">
+<link rel="icon" href="assets/favicon-32.png?v=1" sizes="32x32" type="image/png">
+<link rel="apple-touch-icon" href="assets/apple-touch-icon.png?v=1">
+<link rel="stylesheet" href="assets/style.css?v=30">
 <style>:root { --thumb-size: <?= (int) $config['thumb_size'] ?>px; }</style>
 </head>
 <body data-video-muted="<?= h($videoMuted) ?>" data-video-size="<?= h($videoSize) ?>"
@@ -288,32 +295,12 @@ if ($info !== null && $info['title'] !== '') {
         </span>
     </button>
 
-    <button type="button" class="button settings-button" data-act="settings" aria-label="設定">
-        <span class="button-icon" aria-hidden="true">⚙</span>
-        <span class="menu-button-label">設定</span>
-    </button>
-
     <?php if ($canEdit): ?>
         <button type="button" class="button menu-button" data-act="more"
                 aria-haspopup="menu" aria-expanded="false" aria-label="メニュー">
             <span class="button-icon" aria-hidden="true">⋯</span>
             <span class="menu-button-label">メニュー</span>
         </button>
-    <?php endif; ?>
-
-    <?php // 誰として見ているか。狭い画面ではアイコンだけになる。 ?>
-    <?php if ($authUser !== null): ?>
-        <form class="logout-form" method="post" action="login.php">
-            <input type="hidden" name="token" value="<?= h($token) ?>">
-            <input type="hidden" name="action" value="logout">
-
-            <button type="submit" class="button logout-button"
-                    title="<?= h($authUser['email']) ?> でログイン中。押すとログアウトします。"
-                    aria-label="<?= h($authUser['email']) ?> でログイン中。ログアウトする">
-                <span class="button-icon" aria-hidden="true">⏻</span>
-                <span class="menu-button-label">ログアウト</span>
-            </button>
-        </form>
     <?php endif; ?>
 </header>
 
@@ -596,6 +583,45 @@ if ($error === null) {
 </div><!-- /.listing -->
 
 </main>
+
+<?php
+// 画面の設定と、誰として見ているか。どちらも閲覧そのものには要らないので、
+// 一覧の下に置いて、上の帯は写真を探すための場所に空けてある。
+?>
+<footer class="page-footer">
+    <div class="footer-left">
+        <button type="button" class="button settings-button" data-act="settings">
+            <span class="button-icon" aria-hidden="true">⚙</span>
+            <span class="menu-button-label">設定</span>
+        </button>
+    </div>
+
+    <?php if ($authUser !== null): ?>
+        <div class="footer-account">
+            <span class="footer-email"><?= h($authUser['email']) ?> でログイン中</span>
+
+            <form class="logout-form" method="post" action="login.php">
+                <input type="hidden" name="token" value="<?= h($token) ?>">
+                <input type="hidden" name="action" value="logout">
+
+                <button type="submit" class="button logout-button">
+                    <span class="button-icon" aria-hidden="true">⏻</span>
+                    <span class="menu-button-label">ログアウト</span>
+                </button>
+            </form>
+        </div>
+    <?php elseif ($accessEmail !== ''): ?>
+        <?php // Cloudflare Access で認証している場合。ログアウトはCloudflare側で行う。 ?>
+        <div class="footer-account">
+            <span class="footer-email"><?= h($accessEmail) ?> でログイン中</span>
+
+            <a class="button logout-button" href="/cdn-cgi/access/logout">
+                <span class="button-icon" aria-hidden="true">⏻</span>
+                <span class="menu-button-label">ログアウト</span>
+            </a>
+        </div>
+    <?php endif; ?>
+</footer>
 
 <!-- 右クリック（スマホは長押し）で出る操作メニュー。
      出す項目は対象に応じて app.js が切り替える。
