@@ -246,7 +246,7 @@ if ($info !== null && $info['title'] !== '') {
 <link rel="icon" href="assets/favicon.svg?v=1" type="image/svg+xml">
 <link rel="icon" href="assets/favicon-32.png?v=1" sizes="32x32" type="image/png">
 <link rel="apple-touch-icon" href="assets/apple-touch-icon.png?v=1">
-<link rel="stylesheet" href="assets/style.css?v=30">
+<link rel="stylesheet" href="assets/style.css?v=31">
 <style>:root { --thumb-size: <?= (int) $config['thumb_size'] ?>px; }</style>
 </head>
 <body data-video-muted="<?= h($videoMuted) ?>" data-video-size="<?= h($videoSize) ?>"
@@ -648,6 +648,8 @@ if ($error === null) {
             <span class="button-icon" aria-hidden="true">⚙</span>
             <span class="menu-button-label">設定</span>
         </button>
+
+        <span class="footer-version">v<?= h(PV_VERSION) ?></span>
     </div>
 
     <?php if ($authUser !== null): ?>

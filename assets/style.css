@@ -2136,6 +2136,19 @@ body[data-view="list"] .card:has(.thumb:focus-visible) {
 /* ヘッダーと違って幅に余裕があるので、狭い画面でも文字を出す */
 .page-footer .menu-button-label { display: inline; }
 
+/* 設定ボタンと版数を、高さをそろえて横に並べる */
+.footer-left {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+
+/* 設定ボタンの右に添える版数。読むためのものではないので、目立たせない */
+.footer-version {
+    color: var(--text-muted);
+    font-size: 12px;
+}
+
 .footer-account {
     display: flex;
     flex-wrap: wrap;

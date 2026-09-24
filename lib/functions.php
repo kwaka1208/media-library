@@ -5,6 +5,9 @@
 
 require_once __DIR__ . '/json.php';
 
+// このツールのバージョン。書き換えるのはここ1か所で、画面に出すのはフッターだけ。
+const PV_VERSION = '2.0';
+
 // フォルダに置くと、そのフォルダの情報として表示されるファイルの名前
 const PV_INFO_FILE = 'info.json';
 
