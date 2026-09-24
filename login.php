@@ -94,7 +94,7 @@ header('Cache-Control: no-store');
 <link rel="icon" href="assets/favicon.svg?v=1" type="image/svg+xml">
 <link rel="icon" href="assets/favicon-32.png?v=1" sizes="32x32" type="image/png">
 <link rel="apple-touch-icon" href="assets/apple-touch-icon.png?v=1">
-<link rel="stylesheet" href="assets/style.css?v=30">
+<link rel="stylesheet" href="assets/style.css?v=31">
 </head>
 <body>
 
