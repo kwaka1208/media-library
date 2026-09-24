@@ -37,30 +37,55 @@ function pv_root_key(array $config, $requested): string
  */
 function pv_apply_root(array $config, string $rootKey): array
 {
-    $root = $config['roots'][$rootKey];
+    $root  = $config['roots'][$rootKey];
+    $kinds = pv_root_kinds($config, $root);
 
-    $config['root']       = $rootKey;
-    $config['album_dir']  = $root['dir'];
-    $config['album_url']  = $root['url'];
-    $config['extensions'] = $root['extensions'];
-    $config['root_label'] = $root['label'];
-    $config['root_unit']  = $root['unit'] ?? '件';
-    $config['root_kind']  = $root['kind'] ?? 'image';
+    $config['root']        = $rootKey;
+    $config['album_dir']   = $root['dir'];
+    $config['album_url']   = $root['url'];
+    $config['extensions']  = pv_kinds_extensions($config, $kinds);
+    $config['root_label']  = $root['label'];
+    $config['root_kinds']  = $kinds;
+
+    // 1種類だけのルートでは、その種類の呼び名と単位をそのまま使う。
+    // 写真と動画が混ざるルートでは、どちらにも寄せられないので「件」で数える。
+    $single = count($kinds) === 1 ? $kinds[0] : null;
+
+    $config['root_kind'] = $single ?? 'mixed';
+    $config['root_unit'] = $single === null
+        ? '件'
+        : (string) ($config['kinds'][$single]['unit'] ?? '件');
 
     return $config;
 }
 
 /**
- * 動画として扱う拡張子の一覧。kind が video のルートの設定をまとめて返す。
- * 写真のフォルダに動画が混ざっていても、再生できる形で表示するために使う。
+ * ルートで表示するメディアの種類（kinds のキー）の一覧。
+ * 書かれていないとき、また知らない名前しか書かれていないときは、すべてを対象にする。
  */
-function pv_video_extensions(array $config): array
+function pv_root_kinds(array $config, array $root): array
+{
+    $kinds = [];
+
+    foreach ((array) ($root['kinds'] ?? []) as $kind) {
+        if (is_string($kind) && isset($config['kinds'][$kind])) {
+            $kinds[] = $kind;
+        }
+    }
+
+    return $kinds === [] ? array_keys($config['kinds']) : array_values(array_unique($kinds));
+}
+
+/**
+ * 指定した種類（kinds のキー）で扱う拡張子をまとめて返す。
+ */
+function pv_kinds_extensions(array $config, array $kinds): array
 {
     $extensions = [];
 
-    foreach ($config['roots'] as $root) {
-        if (($root['kind'] ?? 'image') === 'video') {
-            $extensions = array_merge($extensions, $root['extensions']);
+    foreach ($kinds as $kind) {
+        foreach ((array) ($config['kinds'][$kind]['extensions'] ?? []) as $extension) {
+            $extensions[] = strtolower((string) $extension);
         }
     }
 
@@ -68,21 +93,22 @@ function pv_video_extensions(array $config): array
 }
 
 /**
- * 画像として扱う拡張子の一覧。kind が image のルートの設定をまとめて返す。
+ * 動画として扱う拡張子の一覧。
+ * 写真のフォルダに動画が混ざっていても、再生できる形で表示するために使う。
+ */
+function pv_video_extensions(array $config): array
+{
+    return pv_kinds_extensions($config, ['video']);
+}
+
+/**
+ * 画像として扱う拡張子の一覧。
  * info.json のサムネイルは、動画のフォルダでも画像を指すため、
  * いま開いているルートに関係なく、この一覧で確かめる。
  */
 function pv_image_extensions(array $config): array
 {
-    $extensions = [];
-
-    foreach ($config['roots'] as $root) {
-        if (($root['kind'] ?? 'image') === 'image') {
-            $extensions = array_merge($extensions, $root['extensions']);
-        }
-    }
-
-    return array_values(array_unique($extensions));
+    return pv_kinds_extensions($config, ['image']);
 }
 
 /**
