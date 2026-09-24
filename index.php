@@ -23,8 +23,7 @@ if (isset($_GET['init'])) {
 }
 
 // ---- 表示するルートと、絞り込み ----------------------------------
-// 画面上部のタブは「すべて／写真／動画」の絞り込み（?kind=）で、
-// その種類を扱うルートが別にあるときは、ルートごと切り替わる。
+// 画面上部のタブは「すべて／写真／動画」の絞り込み（?kind=）。
 // 以降の処理は、選んだルート1件だけを見ればよいようにしておく。
 $kindWanted = pv_kind_key($config, $_GET['kind'] ?? null);
 $rootKey    = pv_kind_root($config, pv_root_key($config, $_GET['root'] ?? null), $kindWanted);
@@ -164,7 +163,7 @@ $parent   = $relative === '' ? null : pv_normalize_relative(dirname($relative) =
 
 // パンくずにも、info.json のタイトルがあればそれを出す。
 // label は画面に出す名前、name は実際のフォルダ名で、こちらは吹き出しに使う。
-// 先頭（写真・動画のルート）は、タブの名前と揃えたいのでそのままにする。
+// 先頭（ルート自身）は info.json を見に行かず、ルートの label のままにする。
 $lastIndex = count($crumbs) - 1;
 
 foreach ($crumbs as $index => $crumb) {
@@ -213,7 +212,7 @@ foreach ($viewKinds as $viewKind) {
 $extExample = implode('・', $extExamples);
 
 // ---- 動画の見え方の既定値 ----------------------------------------
-// 画面右上の「設定」で変更でき、変更後はブラウザ側（localStorage）に覚えさせる。
+// 一覧の下の「設定」で変更でき、変更後はブラウザ側（localStorage）に覚えさせる。
 // ここで出すのは、まだ一度も設定を変えていない人に使う初期値。
 $videoMuted = !empty($config['video_muted']) ? '1' : '0';
 $videoSize  = ($config['video_size'] ?? 'original') === 'fit' ? 'fit' : 'original';
@@ -235,7 +234,7 @@ $navArgs = ['q' => ''] + $keepArgs;
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
 <?php
-// タブに出る名前。情報のあるフォルダでは、そのタイトルを使う。
+// ブラウザのタブに出る名前。情報のあるフォルダでは、そのタイトルを使う。
 $pageName = $relative === '' ? $rootLabel : $relative;
 
 if ($info !== null && $info['title'] !== '') {

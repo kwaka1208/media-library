@@ -18,7 +18,7 @@ const PV_INFO_RANDOM = 'random';
 const PV_PIN_LIMIT = 30;
 
 /**
- * URLで指定されたルート（写真・動画）の名前を確かめる。
+ * URLで指定されたルートの名前を確かめる。
  * 知らない名前が来たときは、既定のルートに落とす。
  */
 function pv_root_key(array $config, $requested): string
@@ -140,9 +140,9 @@ function pv_apply_kind(array $config, $requested): array
  * いま開いているルートで表示できるならそのまま、できなければ、
  * その種類を扱う最初のルートに移る。どこにも無ければ、いまのルートのまま。
  *
- * 写真と動画が別のルートに分かれているあいだ、?kind= だけを指定されても
- * 正しいルートを開けるようにするための橋渡し。1つにまとめたあとは、
- * どの種類でも同じルートが返るので、この関数は何もしなくなる。
+ * ルートが1つだけなら、どの種類でも同じルートが返るので何も起きない。
+ * 種類ごとにルートを分けている構成で、?kind= だけを指定されたときに、
+ * その種類を置いてあるルートを開くための処理。
  */
 function pv_kind_root(array $config, string $rootKey, string $kind): string
 {
@@ -164,7 +164,7 @@ function pv_kind_root(array $config, string $rootKey, string $kind): string
  * 'root' => 押したときに開くルート] を、「すべて」・kinds に書いた順で返す。
  *
  * 「すべて」は、2種類以上を1つのルートで扱っているときにだけ出す。
- * 写真と動画が別のルートに分かれているあいだは、まとめて見せる先が無いため。
+ * 種類ごとにルートを分けている構成では、まとめて見せる先が無いため。
  */
 function pv_kind_tabs(array $config, string $rootKey): array
 {
@@ -248,7 +248,7 @@ function pv_count_phrase(array $config, array $kinds, array $counts): string
 
 /**
  * 動画として扱う拡張子の一覧。
- * 写真のフォルダに動画が混ざっていても、再生できる形で表示するために使う。
+ * 写真だけに絞り込んで見ているときでも、動画を見分けるために使う。
  */
 function pv_video_extensions(array $config): array
 {
@@ -257,8 +257,8 @@ function pv_video_extensions(array $config): array
 
 /**
  * 画像として扱う拡張子の一覧。
- * info.json のサムネイルは、動画のフォルダでも画像を指すため、
- * いま開いているルートに関係なく、この一覧で確かめる。
+ * info.json のサムネイルは動画しか入っていないフォルダでも画像を指すため、
+ * いま見せている種類に関係なく、この一覧で確かめる。
  */
 function pv_image_extensions(array $config): array
 {
@@ -276,7 +276,7 @@ function pv_is_video(array $config, string $name): bool
 }
 
 /**
- * 画像ルートからの相対パスを検証し、実在するファイルまたはディレクトリの
+ * ルートからの相対パスを検証し、実在するファイルまたはディレクトリの
  * 絶対パスを返す。次のいずれかに当たる場合は null を返す。
  *
  *   - ルート外を指している（../ による脱出、ルート外へのシンボリックリンク）
@@ -547,7 +547,7 @@ function pv_create_default_info(array $config, string $relative): bool
     $title = (string) end($names);
 
     // サムネイルは、このフォルダ直下の画像を名前順に並べた先頭の1枚。
-    // 動画のフォルダでもサムネイルは画像なので、画像の拡張子で探す。
+    // 動画しか入っていないフォルダでもサムネイルは画像なので、画像の拡張子で探す。
     $images    = pv_sort(pv_scan($dir, pv_image_extensions($config))['files'], 'name', 'asc');
     $thumbnail = $images === [] ? '' : (string) $images[0]['name'];
 
@@ -1126,9 +1126,9 @@ function pv_page_numbers(int $current, int $total, int $window = 2): array
 }
 
 /**
- * 画像ルート配下のフォルダを、階層順に並べて返す。移動先の選択に使う。
+ * ルート配下のフォルダを、階層順に並べて返す。移動先の選択に使う。
  * 返り値は ['path' => 相対パス, 'depth' => 深さ, 'name' => 表示名] の配列で、
- * 先頭は画像ルート自身（path は空文字）。
+ * 先頭はルート自身（path は空文字）。
  */
 function pv_folder_tree(string $root, int $maxDepth = 10): array
 {
