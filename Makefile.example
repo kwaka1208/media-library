@@ -26,7 +26,7 @@ LOCAL_DIR  := .
 PORT       := 8765
 
 # 写真・動画を置くフォルダ。config.php の roots に書いた url と同じにすること。
-# ルートを増やしたときは、空白で区切って並べる（例: MEDIA_DIRS := photos movies）。
+# ルートを増やしたときは、空白で区切って並べる（例: MEDIA_DIRS := media archive）。
 MEDIA_DIRS := media
 
 # 転送ルール。

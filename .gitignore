@@ -12,7 +12,7 @@ Makefile
 
 # Apache の設定。認証情報の置き場所（絶対パス）がサーバーごとに違うため、
 # リポジトリには含めない。.htaccess.example をコピーして作成する。
-# （photos/ movies/ の .htaccess は環境に依存しないので対象外）
+# （media/ の .htaccess は環境に依存しないので対象外）
 /.htaccess
 
 # 写真・動画データ。サイズが大きいためリポジトリでは管理しない。
