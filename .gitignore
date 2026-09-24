@@ -20,7 +20,5 @@ media/*
 !media/.gitkeep
 !media/.htaccess
 
-data/*
-
 .DS_Store
 *.sh
