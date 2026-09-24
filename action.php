@@ -17,6 +17,9 @@ pv_session_start();
 // 操作の対象となるルート（写真／動画）。知らない名前が来たら既定のルートに落とす。
 $config = pv_apply_root($config, pv_root_key($config, $_POST['root'] ?? null));
 
+// 一覧で選ばれていた絞り込み。操作そのものには関わらず、戻り先のURLに使う。
+$config = pv_apply_kind($config, $_POST['kind'] ?? null);
+
 /**
  * 元の一覧へ戻る。送られてきた値をそのまま使わず、一覧画面と同じ規則で
  * URLを組み立て直す（外部のURLへ飛ばされるのを防ぐため）。
@@ -28,6 +31,7 @@ function pv_back(array $config): string
 
     $params = [
         'root'  => $config['root'],
+        'kind'  => $config['kind'] === 'all' ? '' : $config['kind'],
         'path'  => pv_normalize_relative((string) ($_POST['dir'] ?? '')),
         'sort'  => in_array($sort, ['name', 'date', 'size'], true) ? $sort : $config['default_sort'],
         'order' => in_array($order, ['asc', 'desc'], true) ? $order : $config['default_order'],

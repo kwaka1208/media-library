@@ -22,15 +22,28 @@ if (isset($_GET['init'])) {
     exit;
 }
 
-// ---- 表示するルート（写真／動画）--------------------------------
+// ---- 表示するルートと、絞り込み ----------------------------------
+// 画面上部のタブは「すべて／写真／動画」の絞り込み（?kind=）で、
+// その種類を扱うルートが別にあるときは、ルートごと切り替わる。
 // 以降の処理は、選んだルート1件だけを見ればよいようにしておく。
-$rootKey = pv_root_key($config, $_GET['root'] ?? null);
-$config  = pv_apply_root($config, $rootKey);
+$kindWanted = pv_kind_key($config, $_GET['kind'] ?? null);
+$rootKey    = pv_kind_root($config, pv_root_key($config, $_GET['root'] ?? null), $kindWanted);
+
+$config = pv_apply_root($config, $rootKey);
+$config = pv_apply_kind($config, $kindWanted);
 
 $root       = $config['album_dir'];
-$extensions = $config['extensions'];
 $rootLabel  = $config['root_label'];
-$unit       = $config['root_unit'];
+
+// 取り込みで受け付ける拡張子（ルート全体）と、いま一覧に出す拡張子（絞り込み後）
+$extensions     = $config['extensions'];
+$viewExtensions = $config['view_extensions'];
+$viewKinds      = $config['view_kinds'];
+$viewLabel      = $config['view_label'];
+
+// タブの持ち回し。絞り込みなしのときは、URLに kind を付けない。
+$kindKey   = $config['kind'];
+$kindParam = $kindKey === 'all' ? '' : $kindKey;
 
 // ---- リクエストパラメータ ----------------------------------------
 $relative = pv_normalize_relative($_GET['path'] ?? '');
@@ -50,6 +63,12 @@ $files = [];
 $totalFiles = 0;
 $totalPages = 1;
 
+$kindCounts = [];
+
+foreach ($viewKinds as $viewKind) {
+    $kindCounts[$viewKind] = 0;
+}
+
 $dir = pv_resolve_dir($root, $relative);
 
 if ($dir === null) {
@@ -63,7 +82,7 @@ if ($dir === null) {
 }
 
 if ($dir !== null && $error === null) {
-    $scanned = pv_scan($dir, $extensions);
+    $scanned = pv_scan($dir, $viewExtensions);
 
     // フォルダに置かれた情報（info.json）を、ここで1回だけ読む。
     // 絞り込みでも一覧の表示でも使うため。
@@ -81,6 +100,15 @@ if ($dir !== null && $error === null) {
     $files = pv_sort(pv_filter($scanned['files'], $keyword), $sort, $order);
 
     $totalFiles = count($files);
+
+    // 種類ごとの件数。「写真 8 枚・動画 3 本」と出すために、切り分ける前に数えておく。
+    foreach ($files as $item) {
+        $itemKind = pv_file_kind($config, $item['name']);
+
+        if ($itemKind !== null && isset($kindCounts[$itemKind])) {
+            $kindCounts[$itemKind]++;
+        }
+    }
 
     // ページ送り（ファイルのみが対象。フォルダは常に先頭に表示する）
     $perPage = (int) $config['per_page'];
@@ -170,6 +198,20 @@ if (count($crumbs) > 4) {
 }
 $baseUrl  = $config['album_url'];
 
+// ---- 名前の変更に出す、拡張子の例 --------------------------------
+// いま表示している種類の、先頭に書いた拡張子を並べる。
+$extExamples = [];
+
+foreach ($viewKinds as $viewKind) {
+    $first = $config['kinds'][$viewKind]['extensions'][0] ?? null;
+
+    if ($first !== null) {
+        $extExamples[] = '.' . (string) $first;
+    }
+}
+
+$extExample = implode('・', $extExamples);
+
 // ---- 動画の見え方の既定値 ----------------------------------------
 // 画面右上の「設定」で変更でき、変更後はブラウザ側（localStorage）に覚えさせる。
 // ここで出すのは、まだ一度も設定を変えていない人に使う初期値。
@@ -180,7 +222,7 @@ $videoSize  = ($config['video_size'] ?? 'original') === 'fit' ? 'fit' : 'origina
 // グリッド（サムネイルを並べる）か、リスト（1行ずつ並べる）か。
 // こちらも設定と同じで、変更後はブラウザ側に覚えさせる。
 $view = ($config['default_view'] ?? 'grid') === 'list' ? 'list' : 'grid';
-$keepArgs = ['root' => $rootKey, 'sort' => $sort, 'order' => $order, 'q' => $keyword];
+$keepArgs = ['root' => $rootKey, 'kind' => $kindParam, 'sort' => $sort, 'order' => $order, 'q' => $keyword];
 
 // フォルダを移動するリンク（フォルダ一覧・パンくず・上のフォルダへ）では、
 // 検索での絞り込みを持ち越さず、q を空にしてクリアする。
@@ -216,12 +258,22 @@ if ($info !== null && $info['title'] !== '') {
     <h1 class="site-title"><a href="./"><?= h($config['title']) ?></a></h1>
 
     <nav class="root-tabs" aria-label="表示する種類">
-        <?php foreach ($config['roots'] as $key => $rootConfig): ?>
-            <?php if ($key === $rootKey): ?>
-                <span class="root-tab current" aria-current="page"><?= h($rootConfig['label']) ?></span>
+        <?php
+        // いま選ばれているタブ。1種類だけを見せているときは、その種類のタブ。
+        $currentTab = count($viewKinds) === 1 ? $viewKinds[0] : 'all';
+        ?>
+        <?php foreach (pv_kind_tabs($config, $rootKey) as $tab): ?>
+            <?php if ($tab['key'] === $currentTab): ?>
+                <span class="root-tab current" aria-current="page"><?= h($tab['label']) ?></span>
             <?php else: ?>
-                <a class="root-tab"
-                   href="<?= h(pv_url(['root' => $key, 'sort' => $sort, 'order' => $order])) ?>"><?= h($rootConfig['label']) ?></a>
+                <?php // 同じルートの中での絞り込みなら、いま開いているフォルダのまま切り替える ?>
+                <a class="root-tab" href="<?= h(pv_url([
+                       'root'  => $tab['root'],
+                       'kind'  => $tab['key'] === 'all' ? '' : $tab['key'],
+                       'path'  => $tab['root'] === $rootKey ? $relative : '',
+                       'sort'  => $sort,
+                       'order' => $order,
+                   ])) ?>"><?= h($tab['label']) ?></a>
             <?php endif; ?>
         <?php endforeach; ?>
     </nav>
@@ -255,6 +307,7 @@ if ($info !== null && $info['title'] !== '') {
 
     <form class="toolbar" method="get" action="./">
         <input type="hidden" name="root" value="<?= h($rootKey) ?>">
+        <input type="hidden" name="kind" value="<?= h($kindParam) ?>">
         <input type="hidden" name="path" value="<?= h($relative) ?>">
 
         <label class="field search">
@@ -333,10 +386,11 @@ if ($error === null) {
     ?>
     <div class="listing-bar">
         <p class="summary">
+            <?php $countPhrase = pv_count_phrase($config, $viewKinds, $kindCounts); ?>
             <?php if ($keyword !== ''): ?>
-                「<?= h($keyword) ?>」に一致する<?= h($rootLabel) ?> <?= $totalFiles ?> <?= h($unit) ?>
+                「<?= h($keyword) ?>」に一致する<?= h($countPhrase) ?>
             <?php else: ?>
-                <?= h($rootLabel) ?> <?= $totalFiles ?> <?= h($unit) ?>
+                <?= h($countPhrase) ?>
             <?php endif; ?>
             <?php if ($totalPages > 1): ?>
                 <span class="page-indicator"><?= $page ?> / <?= $totalPages ?> ページ</span>
@@ -530,8 +584,8 @@ if ($error === null) {
 <?php if ($files === [] && $error === null): ?>
     <p class="notice">
         <?= $keyword !== ''
-            ? '一致する' . h($rootLabel) . 'がありませんでした。'
-            : 'このフォルダに表示できる' . h($rootLabel) . 'がありません。' ?>
+            ? '一致する' . h($viewLabel) . 'がありませんでした。'
+            : 'このフォルダに表示できる' . h($viewLabel) . 'がありません。' ?>
     </p>
 <?php endif; ?>
 
@@ -676,7 +730,7 @@ if ($error === null) {
         <input type="hidden" name="token" value="<?= h($token) ?>">
         <input type="hidden" name="action" value="rename">
         <input type="hidden" name="path" value="">
-        <?= pv_context_fields($rootKey, $relative, $sort, $order, $keyword, $page) ?>
+        <?= pv_context_fields($rootKey, $kindKey, $relative, $sort, $order, $keyword, $page) ?>
 
         <p class="modal-target" data-modal-target></p>
 
@@ -686,7 +740,7 @@ if ($error === null) {
         </label>
 
         <p class="modal-note">
-            ファイルの拡張子（<?= h($config['root_kind'] === 'video' ? '.mp4' : '.jpg') ?> など）は変更できません。
+            ファイルの拡張子（<?= h($extExample) ?> など）は変更できません。
         </p>
 
         <div class="modal-actions">
@@ -704,7 +758,7 @@ if ($error === null) {
         <input type="hidden" name="token" value="<?= h($token) ?>">
         <input type="hidden" name="action" value="move">
         <span data-paths hidden></span>
-        <?= pv_context_fields($rootKey, $relative, $sort, $order, $keyword, $page) ?>
+        <?= pv_context_fields($rootKey, $kindKey, $relative, $sort, $order, $keyword, $page) ?>
 
         <p class="modal-target" data-modal-target></p>
 
@@ -734,7 +788,7 @@ if ($error === null) {
 
         <input type="hidden" name="token" value="<?= h($token) ?>">
         <input type="hidden" name="action" value="info">
-        <?= pv_context_fields($rootKey, $relative, $sort, $order, $keyword, $page) ?>
+        <?= pv_context_fields($rootKey, $kindKey, $relative, $sort, $order, $keyword, $page) ?>
 
         <p class="modal-target">場所： <?= h($relative === '' ? 'ホーム' : $relative) ?></p>
 
@@ -912,7 +966,7 @@ if ($error === null) {
     <input type="hidden" name="action" value="pin">
     <input type="hidden" name="pin" value="1">
     <span data-paths hidden></span>
-    <?= pv_context_fields($rootKey, $relative, $sort, $order, $keyword, $page) ?>
+    <?= pv_context_fields($rootKey, $kindKey, $relative, $sort, $order, $keyword, $page) ?>
 </form>
 
 <div class="modal" id="mkdirModal" hidden>
@@ -921,7 +975,7 @@ if ($error === null) {
 
         <input type="hidden" name="token" value="<?= h($token) ?>">
         <input type="hidden" name="action" value="mkdir">
-        <?= pv_context_fields($rootKey, $relative, $sort, $order, $keyword, $page) ?>
+        <?= pv_context_fields($rootKey, $kindKey, $relative, $sort, $order, $keyword, $page) ?>
 
         <p class="modal-target">作る場所： <?= h($relative === '' ? 'ホーム' : $relative) ?></p>
 
@@ -945,7 +999,7 @@ if ($error === null) {
         <input type="hidden" name="token" value="<?= h($token) ?>">
         <input type="hidden" name="action" value="delete">
         <span data-paths hidden></span>
-        <?= pv_context_fields($rootKey, $relative, $sort, $order, $keyword, $page) ?>
+        <?= pv_context_fields($rootKey, $kindKey, $relative, $sort, $order, $keyword, $page) ?>
 
         <p class="modal-target" data-modal-target></p>
 

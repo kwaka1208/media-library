@@ -47,15 +47,6 @@ function pv_apply_root(array $config, string $rootKey): array
     $config['root_label']  = $root['label'];
     $config['root_kinds']  = $kinds;
 
-    // 1種類だけのルートでは、その種類の呼び名と単位をそのまま使う。
-    // 写真と動画が混ざるルートでは、どちらにも寄せられないので「件」で数える。
-    $single = count($kinds) === 1 ? $kinds[0] : null;
-
-    $config['root_kind'] = $single ?? 'mixed';
-    $config['root_unit'] = $single === null
-        ? '件'
-        : (string) ($config['kinds'][$single]['unit'] ?? '件');
-
     return $config;
 }
 
@@ -90,6 +81,166 @@ function pv_kinds_extensions(array $config, array $kinds): array
     }
 
     return array_values(array_unique($extensions));
+}
+
+/**
+ * URLで指定された絞り込み（画面上部のタブ）の名前を確かめる。
+ * kinds のキーでなければ、絞り込みなし（'all'）に落とす。
+ */
+function pv_kind_key(array $config, $requested): string
+{
+    if (is_string($requested) && isset($config['kinds'][$requested])) {
+        return $requested;
+    }
+
+    return 'all';
+}
+
+/**
+ * 絞り込みを $config に写して返す。pv_apply_root のあとに呼ぶ。
+ *
+ *   kind            … 'all' か kinds のキー
+ *   view_kinds      … 実際に一覧へ出す種類の並び
+ *   view_label      … その呼び名（「写真」「写真・動画」など）
+ *   view_extensions … 一覧に出す拡張子
+ *
+ * 一覧に出す拡張子（view_extensions）と、ルートで受け付ける拡張子（extensions）は
+ * 別のもの。写真だけを表示しているときでも、取り込みは動画も受け付ける。
+ * 絞り込みは「いま何を見せるか」の話で、「何を置けるか」の話ではないため。
+ */
+function pv_apply_kind(array $config, $requested): array
+{
+    $kind = pv_kind_key($config, $requested);
+
+    // そのルートで扱っていない種類で絞り込まれたときは、絞り込みを無かったことにする
+    if ($kind !== 'all' && !in_array($kind, $config['root_kinds'], true)) {
+        $kind = 'all';
+    }
+
+    $kinds  = $kind === 'all' ? $config['root_kinds'] : [$kind];
+    $labels = [];
+
+    foreach ($kinds as $one) {
+        $labels[] = (string) ($config['kinds'][$one]['label'] ?? $one);
+    }
+
+    $config['kind']            = $kind;
+    $config['view_kinds']      = $kinds;
+    $config['view_label']      = implode('・', $labels);
+    $config['view_extensions'] = pv_kinds_extensions($config, $kinds);
+
+    return $config;
+}
+
+/**
+ * ある種類を表示するのに使うルートを返す。
+ * いま開いているルートで表示できるならそのまま、できなければ、
+ * その種類を扱う最初のルートに移る。どこにも無ければ、いまのルートのまま。
+ *
+ * 写真と動画が別のルートに分かれているあいだ、?kind= だけを指定されても
+ * 正しいルートを開けるようにするための橋渡し。1つにまとめたあとは、
+ * どの種類でも同じルートが返るので、この関数は何もしなくなる。
+ */
+function pv_kind_root(array $config, string $rootKey, string $kind): string
+{
+    if ($kind === 'all' || in_array($kind, pv_root_kinds($config, $config['roots'][$rootKey]), true)) {
+        return $rootKey;
+    }
+
+    foreach ($config['roots'] as $key => $root) {
+        if (in_array($kind, pv_root_kinds($config, $root), true)) {
+            return $key;
+        }
+    }
+
+    return $rootKey;
+}
+
+/**
+ * 画面上部に並べるタブ。['key' => 'all'|kinds のキー, 'label' => 名前,
+ * 'root' => 押したときに開くルート] を、「すべて」・kinds に書いた順で返す。
+ *
+ * 「すべて」は、2種類以上を1つのルートで扱っているときにだけ出す。
+ * 写真と動画が別のルートに分かれているあいだは、まとめて見せる先が無いため。
+ */
+function pv_kind_tabs(array $config, string $rootKey): array
+{
+    $tabs = [];
+
+    // 「すべて」の行き先。いま開いているルートを優先し、次に先頭から探す。
+    $mixed = null;
+
+    foreach (array_merge([$rootKey], array_keys($config['roots'])) as $key) {
+        if (count(pv_root_kinds($config, $config['roots'][$key])) > 1) {
+            $mixed = $key;
+            break;
+        }
+    }
+
+    if ($mixed !== null) {
+        $tabs[] = ['key' => 'all', 'label' => 'すべて', 'root' => $mixed];
+    }
+
+    foreach ($config['kinds'] as $kind => $meta) {
+        $root = pv_kind_root($config, $rootKey, $kind);
+
+        // どのルートでも扱っていない種類は、押しても見るものが無いので並べない
+        if (!in_array($kind, pv_root_kinds($config, $config['roots'][$root]), true)) {
+            continue;
+        }
+
+        $tabs[] = [
+            'key'   => $kind,
+            'label' => (string) ($meta['label'] ?? $kind),
+            'root'  => $root,
+        ];
+    }
+
+    return $tabs;
+}
+
+/**
+ * ファイル名を見て、どの種類（kinds のキー）かを返す。
+ * どれにも当てはまらないときは null。
+ */
+function pv_file_kind(array $config, string $name): ?string
+{
+    $ext = strtolower(pathinfo($name, PATHINFO_EXTENSION));
+
+    foreach ($config['kinds'] as $kind => $meta) {
+        foreach ((array) ($meta['extensions'] ?? []) as $one) {
+            if (strtolower((string) $one) === $ext) {
+                return $kind;
+            }
+        }
+    }
+
+    return null;
+}
+
+/**
+ * 「写真 8 枚・動画 3 本」のような、件数の言い方を組み立てる。
+ *
+ * 1種類だけを見せているときは、0件でも「写真 0 枚」とその種類で数える。
+ * 2種類以上を見せているときは、0件のものは並べず、どれも0件なら「0 件」とする。
+ */
+function pv_count_phrase(array $config, array $kinds, array $counts): string
+{
+    $parts = [];
+
+    foreach ($kinds as $kind) {
+        $count = (int) ($counts[$kind] ?? 0);
+
+        if ($count === 0 && count($kinds) > 1) {
+            continue;
+        }
+
+        $parts[] = (string) ($config['kinds'][$kind]['label'] ?? $kind)
+            . ' ' . $count . ' '
+            . (string) ($config['kinds'][$kind]['unit'] ?? '件');
+    }
+
+    return $parts === [] ? '0 件' : implode('・', $parts);
 }
 
 /**
@@ -1028,10 +1179,11 @@ function pv_collect_folders(string $dir, string $relative, int $depth, int $maxD
  * 操作フォームに、いまの表示条件を持たせるための hidden 項目を組み立てる。
  * 処理が終わったあと、同じフォルダ・同じ並び順・同じページに戻すために使う。
  */
-function pv_context_fields(string $root, string $relative, string $sort, string $order, string $keyword, int $page): string
+function pv_context_fields(string $root, string $kind, string $relative, string $sort, string $order, string $keyword, int $page): string
 {
     $fields = [
         'root'  => $root,
+        'kind'  => $kind,
         'dir'   => $relative,
         'sort'  => $sort,
         'order' => $order,
