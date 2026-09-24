@@ -43,22 +43,16 @@ return [
     //   kinds … そのフォルダで表示するメディアの種類（上の kinds のキー）。
     //           複数書くと、写真と動画が同じ一覧に並ぶ。省略するとすべて。
     'roots' => [
-        'photos' => [
-            'label' => '写真',
-            'dir'   => __DIR__ . '/photos',
-            'url'   => 'photos',
-            'kinds' => ['image'],
-        ],
-        'movies' => [
-            'label' => '動画',
-            'dir'   => __DIR__ . '/movies',
-            'url'   => 'movies',
-            'kinds' => ['video'],
+        'media' => [
+            'label' => 'メディア',
+            'dir'   => __DIR__ . '/media',
+            'url'   => 'media',
+            'kinds' => ['image', 'video'],   // 写真と動画を同じ一覧に並べる
         ],
     ],
 
     // 最初に開くルート（roots のキー）
-    'default_root' => 'photos',
+    'default_root' => 'media',
 
     // 画面上部に表示するタイトル
     'title' => 'Media Library',

@@ -1,7 +1,7 @@
 # Media Library
 
 サーバー上の写真・動画を、ブラウザから一覧・再生するためのPHPツールです。
-写真は `photos/`、動画は `movies/` に置き、画面上部のタブで切り替えます。
+写真も動画も `media/` にまとめて置き、画面上部のタブ（すべて／写真／動画）で絞り込みます。
 
 閲覧できる人を限定したいときは、2つのやり方があります。
 Googleアカウントでのログイン（→ [Googleアカウントでログインできるようにする](#5-googleアカウントでログインできるようにする任意)）と、
@@ -15,7 +15,7 @@ Apache の Basic認証（→ [Basic認証をかける](#4-basic認証をかけ�
 
 ## できること
 
-- 写真と動画のタブ切り替え（`photos/` と `movies/`）
+- 写真と動画を1つのツリーで管理（同じフォルダに並び、タブで「すべて／写真／動画」に絞り込める）
 - サムネイルのグリッド表示（写真はクリックで拡大、動画はクリックで再生）
 - 1行ずつ並べるリスト表示（右上のボタンで切り替え）
   - 項目をクリックすると、グリッドと同じように拡大表示・再生
@@ -50,7 +50,7 @@ Apache の Basic認証（→ [Basic認証をかける](#4-basic認証をかけ�
   - 名前の変更
   - 別のフォルダへの移動（複数まとめて可、ドラッグ＆ドロップにも対応）
   - まとめて選ぶ（`⌘`／`Ctrl` ＋クリック、`Shift` ＋クリック、枠で囲むドラッグ、`Shift` ＋矢印キー）
-  - ゴミ箱への移動（すぐには消さず `photos/.trash/`・`movies/.trash/` へ退避）
+  - ゴミ箱への移動（すぐには消さず `media/.trash/` へ退避）
   - 新しいフォルダの作成
   - ピン留め（フォルダ情報の下に並べる）・ピン留めを外す
   - フォルダ情報（`info.json`）の作成・編集
@@ -73,7 +73,7 @@ Apache の Basic認証（→ [Basic認証をかける](#4-basic認証をかけ�
 
 - PHP 7.4 以上（PHP 8.3 で動作確認済み）
 - Apache（`.htaccess` が有効であること）
-- 整理機能を使う場合は、`photos/` `movies/` に書き込み権限があること
+- 整理機能を使う場合は、`media/` に書き込み権限があること
 - Basic認証を使う場合は、Apache の `mod_auth_basic` が有効であること
   （多くのレンタルサーバーでは既定で有効です）
 - Googleアカウントでのログインを使う場合は、サーバーからインターネットへ出られること
@@ -95,8 +95,7 @@ Apache が動くサーバーにファイルを置けば、そのまま動きま�
 | --- | --- |
 | 公開URL | `https://example.com/` |
 | 設置パス | `/home/user/www/media-library/` |
-| 写真フォルダ | `/home/user/www/media-library/photos/` |
-| 動画フォルダ | `/home/user/www/media-library/movies/` |
+| 写真・動画フォルダ | `/home/user/www/media-library/media/` |
 | SSH接続先 | `user@example.com` |
 
 ### 1. ファイルを配置する
@@ -124,23 +123,23 @@ HTTPSリダイレクトを有効にする場合だけです。
 
 ### 2. 写真と動画を置く
 
-写真は `photos/`、動画は `movies/` にアップロードします。
+写真も動画も `media/` にアップロードします。同じフォルダに混ぜて構いません。
 サブフォルダを作れば、そのまま階層として表示されます。
 
 ```
-photos/
+media/
 ├── 2026-01_旅行/
 │   ├── kyoto-01.jpg
+│   ├── kyoto-01.mp4
 │   └── 2日目/
 │       └── day2-a.jpg
 └── landscape/
     └── mountain.jpg
-
-movies/
-└── 2026-01_旅行/
-    ├── kyoto-01.mp4
-    └── kyoto-02.mp4
 ```
+
+写真と動画が同じフォルダに並ぶので、動画しか入っていないフォルダにも、
+写真を1枚置いてフォルダ情報のサムネイルにできます。
+画面上部のタブで「写真だけ」「動画だけ」に絞り込めます。
 
 動画は、ブラウザがそのまま再生できる形式にしてください（`mp4` / `m4v` / `mov` / `webm` / `ogv`）。
 `mp4`（H.264 + AAC）がもっとも確実です。デジタルカメラやスマートフォンの `mov` は、
@@ -243,7 +242,7 @@ Require valid-user
 外部のサービスは使わず、PHPの中で完結します。
 
 > **先に知っておいてください。守れるのは画面だけです。**
-> 写真・動画のファイルは `photos/` `movies/` から直接配信されるため、
+> 写真・動画のファイルは `media/` から直接配信されるため、
 > URLを知っている人は、ログインしていなくてもその写真を開けます。
 > URLを知られること自体が困る場合は、
 > [Cloudflare Access で、写真・動画のファイルまで守る](docs/cloudflare-access.md) を
@@ -307,9 +306,9 @@ make serve            ローカルで動作確認（http://127.0.0.1:8765/）
 
 make diff             サーバーとの差分を確認（転送はしない）
 make deploy           サーバーへ反映
-make deploy-media     photos/ movies/ の中身もサーバーへ転送する
+make deploy-media     media/ の中身もサーバーへ転送する
 
-make remote-init      サーバー側に photos/ movies/ を作る（初回のみ）
+make remote-init      サーバー側に media/ を作る（初回のみ）
 make htpasswd         .htpasswd を作る（対話入力）
 make deploy-htpasswd  .htpasswd をサーバーへ転送
 
@@ -324,12 +323,13 @@ make ssh                 サーバーにSSHでログイン
 事故を防ぐため、以下のようにしています。
 
 - **`rsync --delete` は使いません。** サーバー上にしかないファイルが消えることはありません。
-- **`photos/` `movies/` の中身は `make deploy` では転送しません。**
+- **`media/` の中身は `make deploy` では転送しません。**
   サーバー上の写真・動画には触れません。
   送りたいときだけ `make deploy-media` を実行してください
   （これも `--delete` なしなので、サーバー側のファイルは消えません）。
-  ただし各フォルダの `.htaccess` はツールの一部なので `make deploy` で転送されます。
-- **ゴミ箱（`photos/.trash/`・`movies/.trash/`）は転送しません。**
+  ただし `media/.htaccess` はツールの一部なので `make deploy` で転送されます。
+  対象のフォルダは `Makefile` の `MEDIA_DIRS` で決めています。
+- **ゴミ箱（`media/.trash/`）と取り込みの作業場所（`media/.upload/`）は転送しません。**
   手元とサーバーで中身が違って当然のためです。
 - **`.htpasswd` は `make deploy` では転送しません。** サーバー上の認証情報を
   うっかり上書きしないためです。更新したいときは `make deploy-htpasswd` を使ってください。
@@ -346,7 +346,7 @@ make ssh                 サーバーにSSHでログイン
 ```
 cp .htaccess.example .htaccess # Apache の設定（認証を使うならここで有効化）
 cp Makefile.example Makefile   # 接続先を書き換えてから
-make remote-init      # サーバー側に photos/ movies/ を作る
+make remote-init      # サーバー側に media/ を作る
 make deploy           # ツール本体を転送
 make htpasswd         # 認証情報を作る（Basic認証を使う場合のみ）
 make deploy-htpasswd  # 認証情報を転送（同上）
@@ -361,8 +361,8 @@ make deploy-media     # 写真・動画を転送（サーバー側に直接置�
 
 | 項目 | 説明 | 初期値 |
 | --- | --- | --- |
-| `roots` | 表示するフォルダの一覧（タブの中身） | `photos` と `movies` |
-| `default_root` | 最初に開くフォルダ（`roots` のキー） | `photos` |
+| `roots` | 写真・動画を置くフォルダの一覧 | `media` |
+| `default_root` | 最初に開くフォルダ（`roots` のキー） | `media` |
 | `title` | 画面上部に表示するタイトル | `Media Library` |
 | `per_page` | 1ページあたりの表示件数（`0` で全件表示） | `60` |
 | `thumb_size` | サムネイルの表示サイズ（px） | `200` |
@@ -391,17 +391,20 @@ make deploy-media     # 写真・動画を転送（サーバー側に直接置�
 表示するか、フォルダ情報のサムネイルに使えるかを、この2つの名前で判断しているため、
 変更しないでください。
 
-`roots` の各項目は、次の形で書きます。フォルダを増やしたいときは、ここに足せばタブも増えます。
+`roots` の各項目は、次の形で書きます。
 
 | 項目 | 説明 | 例 |
 | --- | --- | --- |
-| `label` | タブに表示する名前 | `写真` |
-| `dir` | 実際のフォルダ | `__DIR__ . '/photos'` |
-| `url` | 参照するURL（`index.php` からの相対パス） | `photos` |
-| `kinds` | そのフォルダで表示する種類（`kinds` のキー） | `['image']` |
+| `label` | パス表示（パンくず）の先頭に出す名前 | `メディア` |
+| `dir` | 実際のフォルダ | `__DIR__ . '/media'` |
+| `url` | 参照するURL（`index.php` からの相対パス） | `media` |
+| `kinds` | そのフォルダで表示する種類（`kinds` のキー） | `['image', 'video']` |
 
-`kinds` に複数の種類を書くと、写真と動画が同じ一覧に並びます。省略したときは、
-設定してあるすべての種類が対象になります。
+`kinds` に複数の種類を書くと、写真と動画が同じ一覧に並び、画面上部に
+「すべて／写真／動画」のタブが出ます。省略したときは、設定してあるすべての種類が対象です。
+
+`roots` は通常1つで足ります。別の場所にもう1つツリーを持ちたいときだけ足してください。
+その場合、タブはルートの切り替えを兼ねるようになります。
 
 
 ### 画面から変えられる設定
@@ -416,7 +419,7 @@ make deploy-media     # 写真・動画を転送（サーバー側に直接置�
 | 文書 | 内容 |
 | --- | --- |
 | [使い方](docs/usage.md) | 画面での操作、写真とフォルダの整理、フォルダ情報（`info.json`） |
-| [内部のしくみ](docs/tech.md) | ファイル構成、セキュリティ上の配慮、表示の重さ、旧 `info.yml` からの移行 |
+| [内部のしくみ](docs/tech.md) | ファイル構成、タブと絞り込み、セキュリティ上の配慮、表示の重さ、移行用スクリプト |
 | [Googleアカウントでログインする](docs/google-auth.md) | ツールに組み込んだGoogleログインの設定手順 |
 | [Cloudflare Access で、写真・動画のファイルまで守る](docs/cloudflare-access.md) | サーバーの手前で認証する方法。写真・動画の直接URLまで守れる |
 

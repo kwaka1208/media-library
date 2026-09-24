@@ -16,8 +16,8 @@
  *   php tools/convert-info.php --apply    … 実際に info.json を書き出す
  *   php tools/convert-info.php --apply --force
  *                                         … すでにある info.json も上書きする
- *   php tools/convert-info.php --root=photos
- *                                         … 写真のフォルダだけを対象にする
+ *   php tools/convert-info.php --root=media
+ *                                         … 指定したルートだけを対象にする
  *
  * 変換されるのは title / thumbnail / items の3つ。
  * それ以外のキーと、手で書き足したコメントは引き継がれない
@@ -302,7 +302,7 @@ info.yml を info.json に一括変換します。元の info.yml には手を�
   php tools/convert-info.php                 何が起きるかだけを見る（既定）
   php tools/convert-info.php --apply         実際に info.json を書き出す
   php tools/convert-info.php --apply --force すでにある info.json も上書きする
-  php tools/convert-info.php --root=photos   指定したルートだけを対象にする
+  php tools/convert-info.php --root=media    指定したルートだけを対象にする
 
 対象は config.php の roots に書いたフォルダです。
 ゴミ箱（trash_dir）とアップロードの作業場所（upload_temp_dir）は対象外です。

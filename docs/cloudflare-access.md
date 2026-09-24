@@ -62,12 +62,12 @@ Cloudflare の **Cloudflare Access**（Zero Trust）をサーバーの手前に�
 
 ## なぜこの方法だとファイルまで守れるか
 
-このツールは、写真・動画のファイルを `photos/` `movies/` に置いて、
+このツールは、写真・動画のファイルを `media/` に置いて、
 ブラウザから**直接URLで**読み込ませています。PHPを通っていません。
 
 ```
 ブラウザ ──> index.php  （PHP。一覧の画面を組み立てる）
-        └──> photos/2024/IMG_0001.jpg  （PHPを通らない。ただのファイル）
+        └──> media/2024/IMG_0001.jpg  （PHPを通らない。ただのファイル）
 ```
 
 そのため、PHPの中にログイン処理を書き足しても、写真そのものは守れません。
@@ -84,7 +84,7 @@ Cloudflare Access はサーバーの手前に立つので、PHPもファイル�
 ```mermaid
 flowchart LR
     U[閲覧する人] --> CF{Cloudflare Access}
-    CF -->|許可したアカウント| S[さくらのサーバー<br/>index.php / photos / movies]
+    CF -->|許可したアカウント| S[さくらのサーバー<br/>index.php / media]
     CF -->|それ以外| X[Googleのログイン画面へ]
 ```
 
@@ -504,7 +504,7 @@ Googleのログイン画面が出て、許可したアカウントでログイ�
 写真のURLを直接開いてみます。
 
 ```
-https://media.example.com/photos/2024/IMG_0001.jpg
+https://media.example.com/media/2024/IMG_0001.jpg
 ```
 
 ログイン画面に飛べば成功です。写真が表示されてしまったら、
@@ -534,8 +534,8 @@ curl -sI --resolve media.example.com:80:$IP http://media.example.com/
 
 ```
 curl -sI https://media.example.com/ | head -4
-curl -sI https://media.example.com/photos/__no_such_file__.jpg | head -4
-curl -sI https://media.example.com/movies/__no_such_file__.mp4 | head -4
+curl -sI https://media.example.com/media/__no_such_file__.jpg | head -4
+curl -sI https://media.example.com/media/__no_such_file__.mp4 | head -4
 ```
 
 ```
@@ -698,15 +698,15 @@ Cloudflare を使わずに、ファイル本体まで守ろうとする場合の
 ### 手をつける必要がある既存のコード
 
 - `lib/functions.php` の `pv_image_url()` … `media.php` 経由のURLを返すように変える
-- `photos/.htaccess` `movies/.htaccess` … 直接アクセスを全面的に禁止する
-- `config.php` … 各ルートの `url` は使わなくなる
+- `media/.htaccess` … 直接アクセスを全面的に禁止する
+- `config.php` … ルートの `url` は使わなくなる
 
 画面側の認証（`index.php` `action.php` `browse.php` `upload.php`）は、すでに入っています。
 
 ### `media.php` で必要になる処理
 
 - パスを `realpath` で解決し、ルートの外を指していないか確かめる
-- 拡張子がそのルートの `extensions` に含まれるか確かめる
+- 拡張子が `kinds` に書いたものに含まれるか確かめる
 - `Content-Type` を返す
 - **`Range` リクエストへの対応**。これがないと動画のシークができない
 - `Last-Modified` / `ETag` / `304 Not Modified`

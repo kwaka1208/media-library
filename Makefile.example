@@ -25,8 +25,12 @@ REMOTE_DIR := /home/user/www/media-library
 LOCAL_DIR  := .
 PORT       := 8765
 
+# 写真・動画を置くフォルダ。config.php の roots に書いた url と同じにすること。
+# ルートを増やしたときは、空白で区切って並べる（例: MEDIA_DIRS := photos movies）。
+MEDIA_DIRS := media
+
 # 転送ルール。
-#   photos/ movies/ の中身 … サーバー上の写真・動画を消さないため
+#   MEDIA_DIRS の中身     … サーバー上の写真・動画を消さないため
 #                            （中身は make deploy-media で送る）
 #                            ただし .htaccess はツールの一部なので転送する
 #   .htpasswd             … サーバー上の認証情報を上書きしないため
@@ -37,12 +41,7 @@ PORT       := 8765
 #   *.example             … 見本ファイルはサーバーに置く必要がないため
 # rsync はルールを書いた順に評価するので、include を exclude より先に置く。
 FILTERS := \
-	--include 'photos/' \
-	--include 'photos/.htaccess' \
-	--exclude 'photos/**' \
-	--include 'movies/' \
-	--include 'movies/.htaccess' \
-	--exclude 'movies/**' \
+	$(foreach d,$(MEDIA_DIRS),--include '$(d)/' --include '$(d)/.htaccess' --exclude '$(d)/**') \
 	--exclude '.git/' \
 	--exclude '.gitignore' \
 	--exclude '.DS_Store' \
@@ -65,10 +64,10 @@ help:
 	@echo "  make serve         ローカルで動作確認（http://127.0.0.1:$(PORT)/）"
 	@echo ""
 	@echo "  make diff          サーバーとの差分を確認（転送はしない）"
-	@echo "  make deploy        サーバーへ反映（photos/ movies/ と .htpasswd は除く）"
-	@echo "  make deploy-media  photos/ movies/ の中身もサーバーへ追加転送する"
+	@echo "  make deploy        サーバーへ反映（$(MEDIA_DIRS)/ と .htpasswd は除く）"
+	@echo "  make deploy-media  $(MEDIA_DIRS)/ の中身もサーバーへ追加転送する"
 	@echo ""
-	@echo "  make remote-init   サーバー側に photos/ movies/ を作る（初回のみ）"
+	@echo "  make remote-init   サーバー側に $(MEDIA_DIRS)/ を作る（初回のみ）"
 	@echo "  make htpasswd         .htpasswd を作る（対話入力）"
 	@echo "  make deploy-htpasswd  .htpasswd をサーバーへ転送"
 	@echo ""
@@ -105,16 +104,17 @@ deploy: lint
 	@rsync $(RSYNC_OPTS) $(LOCAL_DIR)/ $(SSH_HOST):$(REMOTE_DIR)/
 	@echo "完了しました。"
 
-# photos/ movies/ は通常の deploy では転送しない。
+# MEDIA_DIRS のフォルダは通常の deploy では転送しない。
 # 写真や動画を送りたいときだけ明示的に実行する。
 # こちらも --delete は付けないので、サーバー側にしかないファイルは残る。
-# .trash/ は手元とサーバーで中身が違って当然なので、転送の対象から外している。
+# .trash/ と .upload/ は手元とサーバーで中身が違って当然なので、転送の対象から外している。
 deploy-media:
-	@for d in photos movies; do \
+	@for d in $(MEDIA_DIRS); do \
 		echo "$$d/ の中身を $(SSH_HOST):$(REMOTE_DIR)/$$d/ へ転送します。"; \
 		rsync -avz --no-perms --no-owner --no-group \
 			--exclude '.DS_Store' \
 			--exclude '.trash/' \
+			--exclude '.upload/' \
 			$$d/ $(SSH_HOST):$(REMOTE_DIR)/$$d/ || exit 1; \
 	done
 	@echo "完了しました。"
@@ -138,8 +138,8 @@ deploy-htpasswd:
 # ---- サーバー側の準備 -----------------------------------------
 
 remote-init:
-	@ssh $(SSH_HOST) 'mkdir -p $(REMOTE_DIR)/photos $(REMOTE_DIR)/movies && chmod 755 $(REMOTE_DIR) $(REMOTE_DIR)/photos $(REMOTE_DIR)/movies'
-	@echo "$(REMOTE_DIR)/photos と $(REMOTE_DIR)/movies を作成しました。"
+	@ssh $(SSH_HOST) 'mkdir -p $(addprefix $(REMOTE_DIR)/,$(MEDIA_DIRS)) && chmod 755 $(REMOTE_DIR) $(addprefix $(REMOTE_DIR)/,$(MEDIA_DIRS))'
+	@echo "$(addprefix $(REMOTE_DIR)/,$(MEDIA_DIRS)) を作成しました。"
 
 ssh:
 	@ssh $(SSH_HOST)

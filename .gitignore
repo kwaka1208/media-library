@@ -16,13 +16,9 @@ Makefile
 /.htaccess
 
 # 写真・動画データ。サイズが大きいためリポジトリでは管理しない。
-photos/*
-!photos/.gitkeep
-!photos/.htaccess
-
-movies/*
-!movies/.gitkeep
-!movies/.htaccess
+media/*
+!media/.gitkeep
+!media/.htaccess
 
 data/*
 
