@@ -92,13 +92,31 @@
         });
     }
 
+    // 種類の呼び名（「写真」「動画」）は config.php の kinds で決めている。
+    // index.php が data-kind-labels="image:写真,video:動画" の形で渡してくるので、
+    // ここでは持たずにそれを読む。読めなかったときのために既定も置いておく。
+    var kindNames = { image: '写真', video: '動画' };
+
+    (document.body.dataset.kindLabels || '').split(',').forEach(function (pair) {
+        var sep = pair.indexOf(':');
+
+        if (sep > 0) {
+            kindNames[pair.slice(0, sep)] = pair.slice(sep + 1);
+        }
+    });
+
+    // data-kind に入っている種類の呼び名。知らない種類は画像として扱う。
+    function kindName(kind) {
+        return kindNames[kind] || kindNames.image;
+    }
+
     // 操作対象の呼び名。フォルダか、写真か、動画か。
     function kindLabel(item) {
         if (item.isFolder) {
             return 'フォルダ： ';
         }
 
-        return item.kind === 'video' ? '動画： ' : '写真： ';
+        return kindName(item.kind) + '： ';
     }
 
     // モーダルの見出し下に出す、操作対象の説明文
@@ -2069,7 +2087,7 @@
             fillPropsThumb(card);
 
             propsName.textContent = card.dataset.name || '';
-            propsKind.textContent = card.dataset.kind === 'video' ? '動画' : '写真';
+            propsKind.textContent = kindName(card.dataset.kind);
             propsSize.textContent = card.dataset.size || '';
             propsDate.textContent = card.dataset.date || '';
             propsPath.textContent = slash === -1 ? 'ホーム' : path.slice(0, slash);

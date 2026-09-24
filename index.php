@@ -221,6 +221,16 @@ $videoSize  = ($config['video_size'] ?? 'original') === 'fit' ? 'fit' : 'origina
 // グリッド（サムネイルを並べる）か、リスト（1行ずつ並べる）か。
 // こちらも設定と同じで、変更後はブラウザ側に覚えさせる。
 $view = ($config['default_view'] ?? 'grid') === 'list' ? 'list' : 'grid';
+
+// ---- 種類の呼び名 ------------------------------------------------
+// 操作メニューやプロパティで使う「写真」「動画」の呼び名を app.js へ渡す。
+// 呼び名の出どころを config.php の kinds ひとつに保つため、JS側では持たせない。
+$kindLabels = [];
+
+foreach ($config['kinds'] as $kind => $meta) {
+    $kindLabels[] = $kind . ':' . (string) ($meta['label'] ?? $kind);
+}
+
 $keepArgs = ['root' => $rootKey, 'kind' => $kindParam, 'sort' => $sort, 'order' => $order, 'q' => $keyword];
 
 // フォルダを移動するリンク（フォルダ一覧・パンくず・上のフォルダへ）では、
@@ -249,7 +259,8 @@ if ($info !== null && $info['title'] !== '') {
 <style>:root { --thumb-size: <?= (int) $config['thumb_size'] ?>px; }</style>
 </head>
 <body data-video-muted="<?= h($videoMuted) ?>" data-video-size="<?= h($videoSize) ?>"
-      data-view="<?= h($view) ?>">
+      data-view="<?= h($view) ?>"
+      data-kind-labels="<?= h(implode(',', $kindLabels)) ?>">
 
 <div class="page-header">
 
@@ -1145,6 +1156,6 @@ if ($error === null) {
     </figure>
 </div>
 
-<script src="assets/app.js?v=26"></script>
+<script src="assets/app.js?v=27"></script>
 </body>
 </html>
