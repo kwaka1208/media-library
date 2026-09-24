@@ -30,6 +30,13 @@
 
 body {
     margin: 0;
+
+    /* フッターをウインドウの一番下に置くため、縦に積んで画面の高さぶんを確保する。
+       一覧が短くても .content が伸びるので、フッターが途中に浮くことはない。 */
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+    min-height: 100dvh; /* スマホのアドレスバーを除いた高さ。解さないブラウザは上の 100vh */
     background: var(--bg);
     color: var(--text);
     font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sans JP", "Yu Gothic", sans-serif;
@@ -195,6 +202,9 @@ a { color: var(--accent); }
 /* 一覧の下の余白でも右クリックメニューを出せるよう、高さを確保しておく。
    フォルダの説明があるときは、一覧の右に並べる。 */
 .content {
+    /* 中身が少なくてもここが伸びて、フッターを画面の下まで押し下げる */
+    flex: 1 0 auto;
+
     display: flex;
     gap: 18px;
     align-items: flex-start;
