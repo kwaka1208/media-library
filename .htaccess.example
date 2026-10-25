@@ -15,10 +15,9 @@
 # 既定では無効にしてある。閲覧できる人を限定したいときだけ、
 # 下の4行のコメント（#）を外して使う。
 #
-# 閲覧できる人を限定する方法は、もう1つある。Googleアカウントでのログイン
-# （auth-config.php／→ docs/google-auth.md）で、こちらはツール側で処理する。
-# ふつうはどちらか一方で足りる。両方を有効にすると、閲覧するたびに
-# Basic認証のダイアログとGoogleログインの2回を通ることになる。
+# このツールには、閲覧する人を限定するしくみは組み込んでいない。
+# 限定したいときは、ここでBasic認証をかける。この .htaccess はツールの
+# 一番上のフォルダに置くので、media/ の写真・動画のファイルも同じ認証で守られる。
 #
 # AuthUserFile は「サーバー上の絶対パス」で指定する必要がある。
 # 下の行は見本なので、設置先の絶対パスに必ず書き換えること。
@@ -35,78 +34,6 @@
 #AuthUserFile /path/to/media-library/.htpasswd
 #Require valid-user
 
-# Cloudflare Access を使う場合だけ、下のブロックのコメント（#）を外す。
-# 使わない場合は、このまま触らないこと。
-# ---------------------------------------------------------------
-# Cloudflare Access を通らないアクセスを拒否する
-#
-# Cloudflare Access は「Cloudflare を通ったリクエスト」しか守れない。
-# さくらの初期ドメインやサーバーのIPを直接叩かれると素通りしてしまうため、
-# ここで入口を独自ドメイン＋Cloudflare経由だけに絞る。
-#
-# → 手順の全体は docs/cloudflare-access.md の手順5
-#
-# 【反映のタイミング】Cloudflare Access が動き出す前にこれを有効にすると、
-# 自分もサイトを開けなくなる。Access の設定が済み、独自ドメインで
-# Googleログインが通ることを確かめてから反映すること。
-# ---------------------------------------------------------------
-#
-# (1) 決めたホスト名以外で来たものを拒否する
-#     このツールは crssrds.jp/gallery/ からも同じ場所に届くため、
-#     そちらを塞ぐ役目も兼ねる。
-#<IfModule mod_rewrite.c>
-#    RewriteEngine On
-#    RewriteCond %{HTTP_HOST} !^media\.example\.com$ [NC]
-#    RewriteRule ^ - [F,L]
-#</IfModule>
-#
-# (2) Cloudflare のIPアドレス以外から来たものを拒否する
-#     ホスト名は偽装できるので、こちらが本命の守り。
-#     一覧は https://www.cloudflare.com/ips/ で公開されている（2026-09-21 時点）。
-#     年に数回更新されるため、つながらなくなったときは確認すること。
-#       curl -s https://www.cloudflare.com/ips-v4; echo; curl -s https://www.cloudflare.com/ips-v6
-#
-#     Basic認証と併用する場合は、下の <RequireAny> ごと <RequireAll> で囲み、
-#     その中に Require valid-user を置くこと。囲まずに並べると、Apache は
-#     「どちらか通れば可」（暗黙の RequireAny）と解釈し、Cloudflare経由の
-#     アクセスがBasic認証を素通りしてしまう。
-#<IfModule mod_authz_core.c>
-#    <RequireAny>
-#        # IPv4
-#        Require ip 173.245.48.0/20
-#        Require ip 103.21.244.0/22
-#        Require ip 103.22.200.0/22
-#        Require ip 103.31.4.0/22
-#        Require ip 141.101.64.0/18
-#        Require ip 108.162.192.0/18
-#        Require ip 190.93.240.0/20
-#        Require ip 188.114.96.0/20
-#        Require ip 197.234.240.0/22
-#        Require ip 198.41.128.0/17
-#        Require ip 162.158.0.0/15
-#        Require ip 104.16.0.0/13
-#        Require ip 104.24.0.0/14
-#        Require ip 172.64.0.0/13
-#        Require ip 131.0.72.0/22
-#        # IPv6
-#        Require ip 2400:cb00::/32
-#        Require ip 2606:4700::/32
-#        Require ip 2803:f800::/32
-#        Require ip 2405:b500::/32
-#        Require ip 2405:8100::/32
-#        Require ip 2a06:98c0::/29
-#        Require ip 2c0f:f248::/32
-#    </RequireAny>
-#</IfModule>
-#
-# mod_authz_core は Apache 2.4 以降のもの。ない環境では上のIP制限が
-# まるごと無視され、誰でも開ける状態になってしまう。それに気づかないまま
-# 公開するのを避けるため、その場合は全面拒否にしておく。
-#<IfModule !mod_authz_core.c>
-#    Order allow,deny
-#    Deny from all
-#</IfModule>
-#
 # 既定のインデックス
 DirectoryIndex index.php
 
@@ -114,10 +41,7 @@ DirectoryIndex index.php
 Options -Indexes
 
 # 設定ファイル・パスワードファイル・見本ファイルへの直接アクセスを禁止する
-#
-# auth-config.php にはクライアントシークレットが入る。PHPとして実行されるので
-# 中身がそのまま表示されることはないが、念のためここでも塞いでおく。
-<FilesMatch "^(config\.php|auth-config\.php|\.htpasswd.*|.*\.sample|.*\.example|.*\.md)$">
+<FilesMatch "^(config\.php|\.htpasswd.*|.*\.sample|.*\.example|.*\.md)$">
     <IfModule mod_authz_core.c>
         Require all denied
     </IfModule>
