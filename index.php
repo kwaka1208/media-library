@@ -5,14 +5,8 @@
 
 $config = require __DIR__ . '/config.php';
 require __DIR__ . '/lib/functions.php';
-require __DIR__ . '/lib/auth.php';
 
 pv_session_start();
-
-// ---- ログインの確認 ----------------------------------------------
-// Googleアカウントでの認証を使う設定のときは、ログインしていない人を
-// ログイン画面へ送る。auth-config.php を置いていなければ何もしない。
-pv_auth_require();
 
 // ---- 初期設定の画面 ----------------------------------------------
 // ?init を付けて開いたときは、一覧の代わりに初期設定の画面を出す。
@@ -147,13 +141,6 @@ $canEdit   = empty($config['read_only']) && $writable;
 $token     = pv_csrf_token();
 $messages  = pv_take_flash();
 
-// ログイン中の人（認証を使っていないときは null）
-$authUser  = pv_auth_user();
-
-// Cloudflare Access で認証している場合の、ログイン中のメールアドレス。
-// ツールに組み込んだログインを止めていても、これで誰として見ているかを出せる。
-$accessEmail = pv_auth_access_email();
-
 // 移動先の候補（いま開いているルート配下のフォルダ）
 $folderTree = $canEdit ? pv_folder_tree($root) : [];
 
@@ -255,7 +242,7 @@ if ($info !== null && $info['title'] !== '') {
 <link rel="icon" href="assets/favicon.svg?v=1" type="image/svg+xml">
 <link rel="icon" href="assets/favicon-32.png?v=1" sizes="32x32" type="image/png">
 <link rel="apple-touch-icon" href="assets/apple-touch-icon.png?v=1">
-<link rel="stylesheet" href="assets/style.css?v=31">
+<link rel="stylesheet" href="assets/style.css?v=32">
 <style>:root { --thumb-size: <?= (int) $config['thumb_size'] ?>px; }</style>
 </head>
 <body data-video-muted="<?= h($videoMuted) ?>" data-video-size="<?= h($videoSize) ?>"
@@ -649,7 +636,7 @@ if ($error === null) {
 </main>
 
 <?php
-// 画面の設定と、誰として見ているか。どちらも閲覧そのものには要らないので、
+// 画面の設定。閲覧そのものには要らないので、
 // 一覧の下に置いて、上の帯は写真を探すための場所に空けてある。
 ?>
 <footer class="page-footer">
@@ -661,32 +648,6 @@ if ($error === null) {
 
         <span class="footer-version">v<?= h(PV_VERSION) ?></span>
     </div>
-
-    <?php if ($authUser !== null): ?>
-        <div class="footer-account">
-            <span class="footer-email"><?= h($authUser['email']) ?> でログイン中</span>
-
-            <form class="logout-form" method="post" action="login.php">
-                <input type="hidden" name="token" value="<?= h($token) ?>">
-                <input type="hidden" name="action" value="logout">
-
-                <button type="submit" class="button logout-button">
-                    <span class="button-icon" aria-hidden="true">⏻</span>
-                    <span class="menu-button-label">ログアウト</span>
-                </button>
-            </form>
-        </div>
-    <?php elseif ($accessEmail !== ''): ?>
-        <?php // Cloudflare Access で認証している場合。ログアウトはCloudflare側で行う。 ?>
-        <div class="footer-account">
-            <span class="footer-email"><?= h($accessEmail) ?> でログイン中</span>
-
-            <a class="button logout-button" href="/cdn-cgi/access/logout">
-                <span class="button-icon" aria-hidden="true">⏻</span>
-                <span class="menu-button-label">ログアウト</span>
-            </a>
-        </div>
-    <?php endif; ?>
 </footer>
 
 <!-- 右クリック（スマホは長押し）で出る操作メニュー。
